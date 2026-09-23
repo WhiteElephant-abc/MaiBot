@@ -363,7 +363,11 @@ class MemoryDualVectorStateService(KernelServiceBase):
             self.paragraph_vector_store = self._make_vector_store(self._paragraph_vector_dir())
             self.graph_vector_store = self._make_vector_store(self._graph_vector_dir())
             self._dual_vector_pools_ready = False
-            return False
+            # 磁盘上没有任何向量数据时，缺少 ready manifest 属于「全新库」而不是加载失败：
+            # store 已就绪，应视为可用，允许后续写入并在数据积累后生成世代。
+            # 只有「有数据却缺少可用 manifest」才是真正的加载失败。
+            has_data = self.paragraph_vector_store.has_data() or self.graph_vector_store.has_data()
+            return not has_data
         try:
             paragraph_store = self._make_vector_store(self._paragraph_vector_dir())
             graph_store = self._make_vector_store(self._graph_vector_dir())
