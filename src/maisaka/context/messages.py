@@ -36,6 +36,7 @@ from src.llm_models.payload_content.context_item import (
     ProviderOpaqueItem,
     ReasoningItem,
     RoleType,
+    SUPPORTED_IMAGE_FORMATS,
     get_item_text,
     get_response_tool_calls,
 )
@@ -66,7 +67,8 @@ def _append_emoji_component(
 ) -> bool:
     """将表情组件追加到 LLM 消息构建器。"""
     image_format = _guess_image_format(component.binary_data)
-    if enable_visual_message and image_format and component.binary_data:
+    # 仅当格式在 LLM 支持列表内才发送图片，其余格式（如 AVIF、BMP、TIFF）降级为文本
+    if enable_visual_message and image_format in SUPPORTED_IMAGE_FORMATS and component.binary_data:
         builder.add_text_content("[消息类型]表情包")
         builder.add_image_content(image_format, base64.b64encode(component.binary_data).decode("utf-8"))
         return True
@@ -88,7 +90,8 @@ def _append_image_component(
 ) -> bool:
     """将图片组件追加到 LLM 消息构建器。"""
     image_format = _guess_image_format(component.binary_data)
-    if enable_visual_message and image_format and component.binary_data:
+    # 仅当格式在 LLM 支持列表内才发送图片，其余格式（如 AVIF、BMP、TIFF）降级为文本
+    if enable_visual_message and image_format in SUPPORTED_IMAGE_FORMATS and component.binary_data:
         builder.add_image_content(image_format, base64.b64encode(component.binary_data).decode("utf-8"))
         return True
 
