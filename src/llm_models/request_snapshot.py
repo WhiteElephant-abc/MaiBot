@@ -216,8 +216,14 @@ def _deserialize_string_tuple(raw_value: Any, field_name: str) -> tuple[str, ...
     return tuple(raw_value)
 
 
-def _serialize_content_parts(parts: Sequence[Any]) -> list[dict[str, Any]]:
-    """序列化规范化内容片段。"""
+def _serialize_content_parts(parts: Sequence[Any], *, include_images: bool = True) -> list[dict[str, Any]]:
+    """序列化规范化内容片段。
+
+    Args:
+        parts: 待序列化的内容片段。
+        include_images: 是否携带图片的 base64 数据。Hook 载荷等有帧大小上限的
+            传输场景应置为 False，只保留格式信息。
+    """
 
     parts_payload: list[dict[str, Any]] = []
     for part in parts:
@@ -225,13 +231,13 @@ def _serialize_content_parts(parts: Sequence[Any]) -> list[dict[str, Any]]:
             parts_payload.append({"type": "text", "text": part.text})
             continue
         if isinstance(part, ContextImagePart):
-            parts_payload.append(
-                {
-                    "type": "image",
-                    "image_base64": part.image_base64,
-                    "image_format": part.image_format,
-                }
-            )
+            image_payload: dict[str, Any] = {
+                "type": "image",
+                "image_format": part.image_format,
+            }
+            if include_images:
+                image_payload["image_base64"] = part.image_base64
+            parts_payload.append(image_payload)
         if isinstance(part, ContextRefusalPart):
             parts_payload.append({"type": "refusal", "refusal": part.refusal})
     return parts_payload
@@ -270,15 +276,20 @@ def _deserialize_content_parts(raw_parts: Any) -> tuple[ContextTextPart | Contex
     return tuple(parts)
 
 
-def serialize_context_item_snapshot(item: ContextItem) -> dict[str, Any]:
-    """序列化单个 Context Item；replay fragment 明确不进入快照。"""
+def serialize_context_item_snapshot(item: ContextItem, *, include_images: bool = True) -> dict[str, Any]:
+    """序列化单个 Context Item；replay fragment 明确不进入快照。
+
+    Args:
+        item: 待序列化的 Context Item。
+        include_images: 是否携带图片 base64；Hook 传输等场景应置为 False。
+    """
 
     payload: dict[str, Any] = {
         "item_type": item.__class__.__name__,
         "meta": _serialize_item_meta(item.meta),
     }
     if isinstance(item, (SystemMessageItem, UserMessageItem, AssistantMessageItem)):
-        payload["parts"] = _serialize_content_parts(item.parts)
+        payload["parts"] = _serialize_content_parts(item.parts, include_images=include_images)
         if isinstance(item, AssistantMessageItem) and item.phase is not None:
             payload["phase"] = item.phase
     elif isinstance(item, ReasoningItem):

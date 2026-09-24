@@ -120,17 +120,19 @@ def deserialize_tool_calls(raw_tool_calls: Any) -> List[ToolCall]:
     return normalized_tool_calls
 
 
-def serialize_prompt_items(items: Sequence[ContextItem]) -> List[PromptMessage]:
+def serialize_prompt_items(items: Sequence[ContextItem], *, include_images: bool = True) -> List[PromptMessage]:
     """将 Context Items 序列化为 Hook 可传输载荷，不暴露 replay payload。
 
     Args:
         items: 原始 Context Items。
+        include_images: 是否携带图片 base64。插件运行时 RPC 有单帧大小上限，
+            调用方应传 False，避免含图上下文撑爆传输。
 
     Returns:
         List[PromptMessage]: 序列化后的 Item 字典列表。
     """
 
-    return [serialize_context_item_snapshot(item) for item in items]
+    return [serialize_context_item_snapshot(item, include_images=include_images) for item in items]
 
 
 def deserialize_prompt_items(

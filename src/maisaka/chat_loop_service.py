@@ -1059,7 +1059,9 @@ class MaisakaChatLoopService:
             )
             all_tools = [*get_builtin_tools(availability_context), *self._extra_tools]
 
-        serialized_items = serialize_prompt_items(built_messages)
+        # 插件运行时 RPC 单帧上限 16MiB，上下文里的图片 base64 很容易撑爆；
+        # Hook 载荷只传文本与图片格式，插件不需要原图。
+        serialized_items = serialize_prompt_items(built_messages, include_images=False)
         before_request_result = await self._get_runtime_manager().invoke_hook(
             "maisaka.planner.before_request",
             items=deepcopy(serialized_items),

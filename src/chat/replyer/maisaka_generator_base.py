@@ -763,7 +763,8 @@ class BaseMaisakaReplyGenerator:
         try:
             hook_result = await self._get_runtime_manager().invoke_hook(
                 "maisaka.replyer.before_model_request",
-                items=serialize_prompt_items(request_messages),
+                # 插件运行时 RPC 单帧上限 16MiB，图片 base64 会撑爆；Hook 只传文本与图片格式
+                items=serialize_prompt_items(request_messages, include_images=False),
                 item_schema_version=CONTEXT_ITEM_SCHEMA_VERSION,
                 session_id=session_id,
                 request_type=self.request_type,
