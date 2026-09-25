@@ -299,7 +299,7 @@ class DormancyService:
 
         self._announced_on = today_key
         self._save_state()
-        await self._announce_to_active_chats()
+        await self._announce_to_recent_speakers()
 
     @staticmethod
     def _is_within_announce_window(now_minutes: int, announce_minutes: int, sleep_minutes: int) -> bool:
@@ -309,19 +309,23 @@ class DormancyService:
             return announce_minutes <= now_minutes < sleep_minutes
         return now_minutes >= announce_minutes or now_minutes < sleep_minutes
 
-    async def _announce_to_active_chats(self) -> None:
-        """只对刚刚还在聊天的会话说晚安，安静的会话不打扰。"""
+    async def _announce_to_recent_speakers(self) -> None:
+        """只对麦麦自己最近发过言的会话说晚安。
+
+        判据是「麦麦最近发言」而不是「会话里最近有消息」：它没参与的对话
+        本来就不需要报备去向，戳一戳、撤回这类通知也不算发言。
+        """
 
         from src.chat.heart_flow.heartflow_manager import heartflow_manager
 
-        active_window_seconds = int(global_config.dormancy.announce_active_window_minutes) * 60
+        recent_window_seconds = int(global_config.dormancy.announce_bot_spoke_minutes) * 60
         now_timestamp = datetime.now().timestamp()
         sleep_time = global_config.dormancy.sleep_time
 
         announced_count = 0
         for runtime in list(heartflow_manager.heartflow_chat_list.values()):
-            idle_seconds = now_timestamp - runtime.last_message_received_at()
-            if idle_seconds > active_window_seconds:
+            idle_seconds = now_timestamp - runtime.last_bot_spoke_at()
+            if idle_seconds > recent_window_seconds:
                 continue
             try:
                 await runtime.enqueue_proactive_task(
@@ -337,7 +341,7 @@ class DormancyService:
             except Exception as exc:
                 logger.warning(f"{runtime.log_prefix} 注入睡前意图失败: {exc}")
 
-        logger.info(f"睡前告别已提交给 {announced_count} 个活跃会话")
+        logger.info(f"睡前告别已提交给 {announced_count} 个最近发言的会话")
 
 
 dormancy_service = DormancyService()

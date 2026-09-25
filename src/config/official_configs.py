@@ -402,20 +402,20 @@ class DormancyConfig(ConfigBase):
     )
     """提前多久提醒麦麦准备跟人道晚安。"""
 
-    announce_active_window_minutes: int = Field(
-        default=30,
+    announce_bot_spoke_minutes: int = Field(
+        default=60,
         ge=1,
         le=1440,
         json_schema_extra={
             "x-widget": "input",
             "label": {
-                "zh_CN": "告别活跃窗口（分钟）",
-                "en_US": "Active window for farewell (minutes)",
-                "ja_JP": "おやすみ挨拶のアクティブ窓（分）",
+                "zh_CN": "最近发言窗口（分钟）",
+                "en_US": "Recent speaking window (minutes)",
+                "ja_JP": "最近の発言ウィンドウ（分）",
             },
         },
     )
-    """只跟这段时间内说过话的人道晚安，安静的会话不打扰。"""
+    """只跟这段时间内麦麦自己发过言的会话说晚安，它没参与的对话不打扰。"""
 
     def model_post_init(self, context: Optional[dict] = None) -> None:
         """校验作息时间格式，配置写错在加载期就拒绝，避免半夜才暴露。"""

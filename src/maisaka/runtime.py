@@ -177,6 +177,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         self._message_debounce_seconds = 1.0
         self._message_debounce_required = False
         self._last_message_received_at = 0.0
+        self._last_bot_spoke_at = 0.0
         self._last_external_message_received_at: Optional[float] = None
         self._talk_frequency_adjust = 1.0
         self._recent_external_message_intervals: deque[tuple[float, float]] = deque()
@@ -264,6 +265,11 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
 
         return self._last_message_received_at
 
+    def last_bot_spoke_at(self) -> float:
+        """返回本会话麦麦最近一次发言的时间戳，还没发过言时返回 0。"""
+
+        return self._last_bot_spoke_at
+
     def _emit_monitor_session_start(self) -> None:
         """向 WebUI 监控面板同步当前会话的展示标识。"""
 
@@ -343,6 +349,10 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 continue
 
             source_kind = self._resolve_restored_message_source_kind(message)
+            if source_kind == "guided_reply":
+                # 作息睡前告别按「麦麦最近发言」判断，只在内存里记会随重启归零，
+                # 导致重启当天一条告别都发不出去，这里从库里的历史把它补回来
+                self._last_bot_spoke_at = max(self._last_bot_spoke_at, message.timestamp.timestamp())
             history_message = await self._reasoning_engine._build_history_message(
                 message,
                 source_kind=source_kind,
@@ -597,6 +607,9 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         source_kind: str = "guided_reply",
     ) -> bool:
         """将一条已发送成功的消息同步到 Maisaka 内部历史。"""
+
+        # 记录本会话麦麦最近一次真正发言的时刻；作息睡前告别按它判断「还在跟谁聊」
+        self._last_bot_spoke_at = time.time()
 
         try:
             from src.maisaka.context.history import build_prefixed_message_sequence, build_session_message_visible_text
