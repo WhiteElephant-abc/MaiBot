@@ -7,6 +7,7 @@ from src.chat.heart_flow.heartflow_manager import heartflow_manager
 # from src.chat.utils.chat_message_builder import replace_user_references
 from src.common.utils.utils_message import MessageUtils
 from src.common.logger import get_logger
+from src.maisaka.context.message_adapter import build_visible_text_from_sequence
 from src.person_info.person_info import Person
 
 if TYPE_CHECKING:
@@ -72,7 +73,10 @@ class HeartFCMessageReceiver:
             # # if not processed_plain_text:
             # # print(message)
 
-            logger.info(f"[{mes_name}]{userinfo.user_nickname}:{message.processed_plain_text}")
+            # 用可见文本渲染：纯文本时代码路径与 processed_plain_text 一致，
+            # 但图片、表情包等无文字消息会带上占位符，避免日志里整条消息空白
+            visible_text = build_visible_text_from_sequence(message.raw_message).strip()
+            logger.info(f"[{mes_name}]{userinfo.user_nickname}:{visible_text}")
 
             # 如果是群聊，获取群号和群昵称
             group_id = None
