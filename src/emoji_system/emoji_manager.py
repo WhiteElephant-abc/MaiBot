@@ -19,6 +19,7 @@ from src.common.logger import get_logger
 from src.common.utils.image_path import resolve_stored_image_path, serialize_stored_image_path
 from src.common.utils.utils_image import ImageUtils
 from src.config.config import config_manager, global_config
+from src.services.dormancy_service import dormancy_service
 from src.plugin_runtime.hook_schema_utils import build_object_schema
 from src.plugin_runtime.host.hook_spec_registry import HookSpec, HookSpecRegistry
 from src.prompt.prompt_manager import prompt_manager
@@ -1145,6 +1146,10 @@ class EmojiManager:
                 continue
             except asyncio.TimeoutError:
                 self._maintenance_wakeup_event.clear()
+
+            # 作息休眠期间跳过本轮：这里会对未入库的表情包跑视觉模型打标
+            if dormancy_service.is_dormant():
+                continue
 
             _ensure_directories()
             if global_config.emoji.steal_emoji and (

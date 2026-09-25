@@ -33,6 +33,7 @@ from src.learners.behavior_scene_cluster_store import (
     format_scene_cluster_distribution,
 )
 from src.llm_models.payload_content.context_item import ContextItem, ContextItemBuilder, RoleType
+from src.services.dormancy_service import bypass_dormancy
 from src.services.llm_service import LLMServiceClient
 from src.webui.dependencies import require_auth
 
@@ -236,10 +237,12 @@ async def _analyze_debug_scene_text(scene_text: str) -> BehaviorScenarioProfile:
         )
         return generation_result.response or ""
 
-    profile = await behavior_scenario_analyzer.analyze(
-        context_text=normalized_scene_text,
-        sub_agent_runner=run_scene_prompt,
-    )
+    # 检索调试由人在界面上主动发起，作息休眠期间也应放行
+    with bypass_dormancy():
+        profile = await behavior_scenario_analyzer.analyze(
+            context_text=normalized_scene_text,
+            sub_agent_runner=run_scene_prompt,
+        )
     if not profile.summary:
         profile = BehaviorScenarioProfile(
             summary=normalized_scene_text,

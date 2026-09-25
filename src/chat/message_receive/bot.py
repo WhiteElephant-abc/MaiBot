@@ -22,6 +22,7 @@ from src.plugin_runtime.hook_payloads import deserialize_session_message, serial
 from src.plugin_runtime.hook_schema_utils import build_object_schema
 from src.plugin_runtime.host.hook_dispatcher import HookDispatchResult
 from src.plugin_runtime.host.hook_spec_registry import HookSpec, HookSpecRegistry
+from src.services.dormancy_service import dormancy_service
 from src.maisaka.context.clear_context import (
     CLEAR_CONTEXT_COMMAND,
     is_clear_context_command,
@@ -779,9 +780,11 @@ class ChatBot:
             # 如果 Maisaka 需要直接消费图片，会在后续构建 prompt 时按需回填图片二进制数据，
             # 这里不再复制整条原始消息。
             # 入站主链优先保证消息尽快入队，避免图片、表情包、语音分析阻塞适配器超时。
+            # 休眠期间连语音转写也一并跳过：语音转写是同步的，不挡就会在半夜消耗一次模型调用。
+            is_dormant = dormancy_service.is_dormant()
             await message.process(
                 enable_heavy_media_analysis=False,
-                enable_voice_transcription=global_config.voice.enable_asr,
+                enable_voice_transcription=global_config.voice.enable_asr and not is_dormant,
             )
             after_process_result, message = await self._invoke_message_hook(
                 "chat.receive.after_process",

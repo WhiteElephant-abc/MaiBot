@@ -175,6 +175,11 @@ class MainSystem:
         logger.info(t("startup.chat_manager_initialized"))
         await memory_automation_service.start()
 
+        # 启动作息调度：就寝时段会拦住一切模型调用并停掉所有会话运行时
+        from src.services.dormancy_service import dormancy_service
+
+        await dormancy_service.start()
+
         # await asyncio.sleep(0.5) #防止logger输出飞了
 
         # 触发 ON_START 事件，事件总线会统一桥接到 IPC 插件运行时。
@@ -261,8 +266,10 @@ async def main() -> None:
         from src.emoji_system.emoji_manager import emoji_manager
         from src.mcp_module.service import get_mcp_service
         from src.plugin_runtime.integration import get_plugin_runtime_manager
+        from src.services.dormancy_service import dormancy_service
         from src.services.memory_flow_service import memory_automation_service
 
+        await dormancy_service.stop()
         emoji_manager.shutdown()
         await memory_automation_service.shutdown()
         await a_memorix_host_service.stop()

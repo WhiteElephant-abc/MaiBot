@@ -6,6 +6,7 @@ import asyncio
 import time
 
 from src.common.logger import get_logger
+from src.services.dormancy_service import dormancy_service
 
 from ...utils.memory_lifecycle_policy import (
     RelationLifecycleEvent,
@@ -21,6 +22,8 @@ MAX_PROJECTION_RECONCILE_ROUNDS = 3
 class MemoryMaintenanceService(KernelServiceBase):
     async def _memory_maintenance_loop(self) -> None:
         while not self._background_stopping:
+            # 作息休眠期间原地等待，醒来后按原有间隔继续
+            await dormancy_service.wait_until_awake()
             interval_value = self._cfg("memory.base_decay_interval_hours", 1.0)
             interval_hours = max(1.0 / 60.0, float(1.0 if interval_value is None else interval_value))
             try:

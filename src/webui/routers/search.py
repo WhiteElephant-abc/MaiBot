@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from src.common.logger import get_logger
+from src.services.dormancy_service import bypass_dormancy
 from src.webui.dependencies import require_auth
 from src.webui.services.ai_search_agent import (
     build_response_sources,
@@ -179,10 +180,12 @@ async def _execute_ai_search_request(
         return cached_response
 
     try:
-        generation_result, model_output = await asyncio.wait_for(
-            run_ai_search_agent(request, record_progress),
-            timeout=AI_SEARCH_TIMEOUT_SECONDS,
-        )
+        # AI 搜索由人在界面上主动发起，作息休眠期间也应放行
+        with bypass_dormancy():
+            generation_result, model_output = await asyncio.wait_for(
+                run_ai_search_agent(request, record_progress),
+                timeout=AI_SEARCH_TIMEOUT_SECONDS,
+            )
     except asyncio.TimeoutError as exc:
         _log_ai_search_record(
             request=request,

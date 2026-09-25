@@ -15,6 +15,7 @@ from src.chat.utils.utils import is_bot_self
 from src.config.config import global_config
 from src.person_info.person_info import Person, get_person_id, store_person_memory_from_answer
 from src.services import memory_service as memory_service_module
+from src.services.dormancy_service import dormancy_service
 from src.services.memory_service import memory_service
 
 logger = get_logger("memory_flow_service")
@@ -68,6 +69,8 @@ class PersonFactWritebackService:
             while not self._stopping:
                 message = await self._queue.get()
                 try:
+                    # 睡着时先把手里这条挂住，醒来再处理，避免半夜消耗模型调用
+                    await dormancy_service.wait_until_awake()
                     await self._handle_message(message)
                 except Exception as exc:
                     logger.warning(f"人物事实写回处理失败: {exc}", exc_info=True)
@@ -466,6 +469,8 @@ class ChatSummaryWritebackService:
             while not self._stopping:
                 message = await self._queue.get()
                 try:
+                    # 睡着时先把手里这条挂住，醒来再处理，避免半夜消耗模型调用
+                    await dormancy_service.wait_until_awake()
                     await self._handle_message(message)
                 except Exception as exc:
                     logger.warning(f"聊天摘要写回处理失败: {exc}", exc_info=True)

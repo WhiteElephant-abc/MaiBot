@@ -4,6 +4,9 @@ import re
 
 from .config_base import ConfigBase, Field
 
+DORMANCY_TIME_PATTERN: Final = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+"""作息时间格式，24 小时制 HH:MM。"""
+
 RULE_TYPE_OPTION_DESCRIPTIONS = {
     "group": "群聊聊天流，item_id 填群号或群聊 ID",
     "private": "私聊聊天流，item_id 填用户 ID",
@@ -337,6 +340,91 @@ class ImageCacheCleanupConfig(ConfigBase):
         },
     )
     """图片文件删掉后，识别文字还能保留多久。"""
+
+
+class DormancyConfig(ConfigBase):
+    """作息配置类"""
+
+    __ui_label__ = "作息"
+    __ui_order__ = 75
+
+    enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "x-widget": "switch",
+            "label": {
+                "zh_CN": "启用作息",
+                "en_US": "Enable dormancy schedule",
+                "ja_JP": "生活リズムを有効化",
+            },
+        },
+    )
+    """开启后麦麦会在就寝时间跟还在聊天的人道晚安，然后一直睡到起床时间。"""
+
+    sleep_time: str = Field(
+        default="23:30",
+        json_schema_extra={
+            "x-widget": "input",
+            "label": {
+                "zh_CN": "就寝时间",
+                "en_US": "Sleep time",
+                "ja_JP": "就寝時刻",
+            },
+        },
+    )
+    """每天开始休眠的时刻，格式 HH:MM。"""
+
+    wake_time: str = Field(
+        default="08:00",
+        json_schema_extra={
+            "x-widget": "input",
+            "label": {
+                "zh_CN": "起床时间",
+                "en_US": "Wake time",
+                "ja_JP": "起床時刻",
+            },
+        },
+    )
+    """每天结束休眠的时刻，格式 HH:MM；小于就寝时间表示跨夜。"""
+
+    announce_lead_minutes: int = Field(
+        default=15,
+        ge=1,
+        le=180,
+        json_schema_extra={
+            "x-widget": "input",
+            "label": {
+                "zh_CN": "睡前提醒提前量（分钟）",
+                "en_US": "Sleep notice lead time (minutes)",
+                "ja_JP": "就寝通知の先行時間（分）",
+            },
+        },
+    )
+    """提前多久提醒麦麦准备跟人道晚安。"""
+
+    announce_active_window_minutes: int = Field(
+        default=30,
+        ge=1,
+        le=1440,
+        json_schema_extra={
+            "x-widget": "input",
+            "label": {
+                "zh_CN": "告别活跃窗口（分钟）",
+                "en_US": "Active window for farewell (minutes)",
+                "ja_JP": "おやすみ挨拶のアクティブ窓（分）",
+            },
+        },
+    )
+    """只跟这段时间内说过话的人道晚安，安静的会话不打扰。"""
+
+    def model_post_init(self, context: Optional[dict] = None) -> None:
+        """校验作息时间格式，配置写错在加载期就拒绝，避免半夜才暴露。"""
+
+        for field_name, field_value in (("sleep_time", self.sleep_time), ("wake_time", self.wake_time)):
+            normalized_time = field_value.strip()
+            if not DORMANCY_TIME_PATTERN.fullmatch(normalized_time):
+                raise ValueError(f"{field_name} 必须为 HH:MM 格式，当前值为 {field_value!r}")
+        return super().model_post_init(context)
 
 
 class VisualConfig(ConfigBase):

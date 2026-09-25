@@ -91,6 +91,14 @@ class HeartflowManager:
         except Exception as exc:
             logger.warning(f"淘汰心流聊天 {session_id} 失败: {exc}", exc_info=True)
 
+    async def stop_all_chats(self, *, reason: str) -> int:
+        """停止并移除所有会话运行时，返回被停止的数量。"""
+
+        session_ids = list(self.heartflow_chat_list)
+        for session_id in session_ids:
+            await self._evict_chat(session_id, reason=reason)
+        return len(session_ids)
+
     async def clear_chat_history_context(self, session_id: str) -> bool:
         """停止并移除当前会话运行时，使其短期历史上下文立即失效。"""
 

@@ -1,3 +1,24 @@
+# 全库统一使用 LF，避免跨平台编辑引入无意义的行尾差异
+# 注意：gitattributes 中后出现的规则覆盖先出现的，因此下面的例外必须写在后面
+* text=auto eol=lf
+
+# Windows 批处理脚本必须保留 CRLF
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# 二进制文件不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.db binary
+*.sqlite binary
+*.db-wal binary
+*.db-shm binary
+
 webui/dist/** binary

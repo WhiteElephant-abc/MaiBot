@@ -30,6 +30,7 @@ from src.llm_models.request_snapshot import (
 )
 from src.services.llm_service import generate as generate_llm_response
 from src.services.bot_account_service import get_all_bot_account_pairs
+from src.services.dormancy_service import bypass_dormancy
 from src.services.service_task_resolver import get_available_models
 from src.webui.dependencies import require_auth
 from src.webui.routers.avatar import build_webui_avatar_url
@@ -2059,17 +2060,19 @@ async def replay_reasoning_prompt(request: ReasoningReplayRequest):
 
     task_name = _resolve_replay_task_name(request.stage, model_name)
     started_at = time.perf_counter()
-    service_result = await generate_llm_response(
-        LLMServiceRequest(
-            task_name=task_name,
-            request_type=f"webui.reasoning_replay.{request.stage or 'unknown'}",
-            context_factory=lambda _: replay_items,
-            model_name=model_name,
-            tool_options=tool_definitions,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
+    # 推理重放由人在界面上主动发起，作息休眠期间也应放行
+    with bypass_dormancy():
+        service_result = await generate_llm_response(
+            LLMServiceRequest(
+                task_name=task_name,
+                request_type=f"webui.reasoning_replay.{request.stage or 'unknown'}",
+                context_factory=lambda _: replay_items,
+                model_name=model_name,
+                tool_options=tool_definitions,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+            )
         )
-    )
     duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
     completion = service_result.completion
     return ReasoningReplayResponse(

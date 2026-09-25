@@ -9,6 +9,7 @@ import time
 
 from src.common.logger import get_logger
 from src.services import message_service as message_api
+from src.services.dormancy_service import dormancy_service
 from src.services.llm_service import LLMServiceClient
 
 from ...utils import profile_policy
@@ -667,6 +668,8 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
     async def _feedback_correction_reconcile_loop(self) -> None:
         try:
             while not self._background_stopping:
+                # 作息休眠期间原地等待，醒来后按原有间隔继续
+                await dormancy_service.wait_until_awake()
                 await asyncio.sleep(feedback_cfg_reconcile_interval_seconds())
                 if self._background_stopping:
                     break
@@ -1496,6 +1499,8 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
     async def _feedback_correction_loop(self) -> None:
         try:
             while not self._background_stopping:
+                # 作息休眠期间原地等待，醒来后按原有间隔继续
+                await dormancy_service.wait_until_awake()
                 interval_seconds = feedback_cfg_check_interval_seconds()
                 if not feedback_cfg_enabled():
                     await asyncio.sleep(interval_seconds)

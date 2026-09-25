@@ -9,6 +9,7 @@ from src.common.utils.utils_message import MessageUtils
 from src.common.logger import get_logger
 from src.maisaka.context.message_adapter import build_visible_text_from_sequence
 from src.person_info.person_info import Person
+from src.services.dormancy_service import dormancy_service
 
 if TYPE_CHECKING:
     from src.chat.message_receive.message import SessionMessage
@@ -53,10 +54,15 @@ class HeartFCMessageReceiver:
             # message.is_at = is_at
 
             chat = None
-            try:
-                chat = await heartflow_manager.get_or_create_heartflow_chat(message.session_id)
-            except Exception as e:
-                logger.error(f"出现错误: {e}")
+            if dormancy_service.is_dormant():
+                # 睡着时不创建会话运行时：消息照常入库，醒来后新建的运行时
+                # 会从消息库恢复上下文，因此睡眠期间的内容不会丢
+                logger.debug("休眠中，仅记录消息，不唤醒会话运行时")
+            else:
+                try:
+                    chat = await heartflow_manager.get_or_create_heartflow_chat(message.session_id)
+                except Exception as e:
+                    logger.error(f"出现错误: {e}")
 
             await MessageUtils.store_message_to_db_async(message)  # 存储消息到数据库
             if chat is not None:

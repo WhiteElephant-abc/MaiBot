@@ -26,6 +26,7 @@ from src.llm_models.payload_content.context_item import ContextItem, ContextItem
 from src.llm_models.payload_content.tool_option import ToolCall
 from src.llm_models.request_snapshot import format_request_snapshot_log_info
 from src.llm_models.utils_model import LLMOrchestrator, LLMResponseResult
+from src.services.dormancy_service import bypass_dormancy
 from src.webui.dependencies import require_auth
 from src.webui.utils.network_security import validate_public_url
 
@@ -143,21 +144,24 @@ async def test_model_capability(request: ModelTestRequest):
     if model_config is None:
         raise HTTPException(status_code=404, detail=f"未找到模型: {model_name}")
 
+    # 模型测试由人在界面上主动发起，作息休眠期间也应放行，否则按钮点了没反应
     # 嵌入模型不支持 chat/completions 接口，需改用嵌入接口测试
     if model_name in _get_embedding_task_model_names():
-        return await _test_embedding_model(model_name)
+        with bypass_dormancy():
+            return await _test_embedding_model(model_name)
 
     visual_enabled = bool(model_config.get("visual", False))
     start_time = time.time()
     try:
         orchestrator = _SingleModelTestOrchestrator(model_name=model_name)
-        result = await orchestrator.generate_response_with_context_async(
-            context_factory=_build_model_test_context_factory(visual_enabled),
-            temperature=0.0,
-            max_tokens=512,
-            model_name=model_name,
-            tools=_build_model_test_tools(),
-        )
+        with bypass_dormancy():
+            result = await orchestrator.generate_response_with_context_async(
+                context_factory=_build_model_test_context_factory(visual_enabled),
+                temperature=0.0,
+                max_tokens=512,
+                model_name=model_name,
+                tools=_build_model_test_tools(),
+            )
         latency_ms = round((time.time() - start_time) * 1000, 2)
         return _build_model_test_response(
             model_name=model_name,

@@ -119,6 +119,20 @@ class LLMOrchestrator:
 
         return str(session_id or self.session_id or "").strip()
 
+    @staticmethod
+    def _ensure_not_dormant() -> None:
+        """休眠期间拦下模型与嵌入调用。
+
+        文本、图像、语音与嵌入最终都汇聚到本类的几个出口，作息闸门放在这一层
+        才能保证没有调用点漏判；上层仍应先查 `is_dormant()` 并让路，
+        这里只作为兜底。
+        """
+
+        from src.services.dormancy_service import DormancyError, dormancy_service
+
+        if dormancy_service.should_block_model_call():
+            raise DormancyError("当前处于作息休眠时段，本次模型调用已被拦下")
+
     def _get_task_config_or_raise(self) -> TaskConfig:
         """获取当前任务名对应的最新任务配置。
 
@@ -326,6 +340,7 @@ class LLMOrchestrator:
         Returns:
             LLMResponseResult: 统一文本响应结果对象。
         """
+        self._ensure_not_dormant()
         self._refresh_task_config()
         start_time = time.time()
 
@@ -378,6 +393,7 @@ class LLMOrchestrator:
         Returns:
             LLMAudioTranscriptionResult: 语音转写结果对象。
         """
+        self._ensure_not_dormant()
         self._refresh_task_config()
         execution_result = await self._execute_request(
             request_type=RequestType.AUDIO,
@@ -412,6 +428,7 @@ class LLMOrchestrator:
         Returns:
             LLMResponseResult: 统一文本响应结果对象。
         """
+        self._ensure_not_dormant()
         del raise_when_empty
         self._refresh_task_config()
         start_time = time.time()
@@ -480,6 +497,7 @@ class LLMOrchestrator:
         Returns:
             LLMResponseResult: 统一文本响应结果对象。
         """
+        self._ensure_not_dormant()
         del raise_when_empty
         self._refresh_task_config()
         start_time = time.time()
@@ -528,6 +546,7 @@ class LLMOrchestrator:
         Returns:
             LLMEmbeddingResult: 向量生成结果对象。
         """
+        self._ensure_not_dormant()
         self._refresh_task_config()
         start_time = time.time()
         execution_result = await self._execute_request(

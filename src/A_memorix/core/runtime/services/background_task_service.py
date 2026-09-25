@@ -6,6 +6,7 @@ import asyncio
 import time
 
 from src.common.logger import get_logger
+from src.services.dormancy_service import dormancy_service
 
 from ...utils import profile_policy
 from .base import KernelServiceBase
@@ -46,6 +47,13 @@ class MemoryBackgroundTaskService(KernelServiceBase):
         self._background_tasks[name] = asyncio.create_task(factory(), name=f"A_Memorix.{name}")
 
     async def _sleep_background(self, seconds: float) -> None:
+        """后台循环的统一等待点，同时承担作息让路。
+
+        每个循环都在每轮开头调用它，因此在这里等待醒来即可覆盖全部循环；
+        采用原地轮询而不是集中唤醒，各循环醒来后仍按原有间隔继续，不会同时发起请求。
+        """
+
+        await dormancy_service.wait_until_awake()
         await asyncio.sleep(max(0.0, float(seconds or 0.0)))
 
     async def _dual_vector_auto_migration_loop(self) -> None:
@@ -355,7 +363,7 @@ class MemoryBackgroundTaskService(KernelServiceBase):
     async def _embedding_probe_loop(self) -> None:
         try:
             while not self._background_stopping:
-                await asyncio.sleep(self._embedding_probe_interval_seconds())
+                await self._sleep_background(self._embedding_probe_interval_seconds())
                 if self._background_stopping:
                     break
                 startup_deferred = self._is_startup_self_check_deferred()
@@ -379,7 +387,7 @@ class MemoryBackgroundTaskService(KernelServiceBase):
     async def _paragraph_vector_backfill_loop(self) -> None:
         try:
             while not self._background_stopping:
-                await asyncio.sleep(self._paragraph_vector_backfill_interval_seconds())
+                await self._sleep_background(self._paragraph_vector_backfill_interval_seconds())
                 if self._background_stopping:
                     break
                 if not self._paragraph_vector_backfill_enabled():
@@ -408,7 +416,7 @@ class MemoryBackgroundTaskService(KernelServiceBase):
                     if bool(result.get("done", False)):
                         await self._run_legacy_vector_io_in_thread(self._cleanup_vector_quarantine)
                         break
-                await asyncio.sleep(0.1)
+                await self._sleep_background(0.1)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -418,7 +426,7 @@ class MemoryBackgroundTaskService(KernelServiceBase):
         try:
             while not self._background_stopping:
                 interval_minutes = max(1.0, float(self._cfg("person_profile.refresh_interval_minutes", 30) or 30))
-                await asyncio.sleep(max(60.0, interval_minutes * 60.0))
+                await self._sleep_background(max(60.0, interval_minutes * 60.0))
                 if self._background_stopping:
                     break
                 if not bool(self._cfg("person_profile.enabled", True)):
@@ -454,7 +462,7 @@ class MemoryBackgroundTaskService(KernelServiceBase):
     async def _person_profile_refresh_queue_loop(self) -> None:
         try:
             while not self._background_stopping:
-                await asyncio.sleep(profile_policy.person_profile_refresh_queue_interval_seconds(self._cfg))
+                await self._sleep_background(profile_policy.person_profile_refresh_queue_interval_seconds(self._cfg))
                 if self._background_stopping:
                     break
                 if not bool(self._cfg("person_profile.enabled", True)):

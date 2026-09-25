@@ -259,6 +259,11 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         _, enable_learning = JargonConfigUtils.get_jargon_config_for_chat(self.session_id)
         return enable_learning
 
+    def last_message_received_at(self) -> float:
+        """返回本会话最近一次收到消息的时间戳，还没收到过时返回 0。"""
+
+        return self._last_message_received_at
+
     def _emit_monitor_session_start(self) -> None:
         """向 WebUI 监控面板同步当前会话的展示标识。"""
 
@@ -304,6 +309,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             await self._init_mcp()
 
         await self._restore_recent_context_from_db()
+        self._append_dormancy_wake_notice()
         self._running = True
         if self._is_reply_effect_tracking_enabled():
             await self._reply_effect_tracker.start()
@@ -363,6 +369,30 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             f"{self.log_prefix} 已恢复最近上下文: "
             f"历史消息={len(restored_history)} 用户消息缓存={len(self.message_cache)}"
         )
+
+    def _append_dormancy_wake_notice(self) -> None:
+        """按作息睡醒后重建运行时，补一条苏醒提示。
+
+        与启动时的上下文恢复不同：那是进程重启，这里是按作息睡了一觉，
+        模型需要知道自己是刚醒而不是刚重启。提示只消费一次。
+        """
+
+        from src.services.dormancy_service import dormancy_service
+
+        notice_text = dormancy_service.wake_notice()
+        if not notice_text:
+            return
+
+        self._chat_history.append(
+            ReferenceMessage(
+                content=notice_text,
+                timestamp=datetime.now(),
+                reference_type=ReferenceMessageType.DORMANCY_WAKE,
+                remaining_uses_value=1,
+                display_prefix="[作息苏醒]",
+            )
+        )
+        logger.info(f"{self.log_prefix} 已注入作息苏醒提示")
 
     def _get_context_restore_limit(self) -> int:
         """返回启动时最多回灌的真实消息数量。"""
@@ -666,8 +696,18 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         reason: str = "",
         priority: str = "",
         metadata: Optional[dict[str, Any]] = None,
+        intro: str = "插件请求你主动处理一轮聊天",
     ) -> dict[str, Any]:
-        """追加一个插件主动聊天任务，并唤醒 Maisaka 主循环。"""
+        """追加一个主动聊天任务，并唤醒 Maisaka 主循环。
+
+        Args:
+            plugin_id: 提交方标识，用于日志与任务 ID。
+            intent: 希望麦麦主动处理的事情。
+            reason: 触发原因，会一并交给模型参考。
+            priority: 优先级说明。
+            metadata: 附加信息，序列化后交给模型参考。
+            intro: 任务说明的开头一句，内置功能可以换成更贴合语境的措辞。
+        """
 
         normalized_plugin_id = str(plugin_id or "").strip() or "unknown"
         normalized_intent = str(intent or "").strip()
@@ -677,7 +717,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         task_id = f"proactive:{normalized_plugin_id}:{int(time.time() * 1000)}"
         detail_lines = [
             f'<plugin_proactive_task id="{task_id}" plugin_id="{normalized_plugin_id}">',
-            f"插件请求你主动处理一轮聊天：{normalized_intent}",
+            f"{intro}：{normalized_intent}",
         ]
         if reason:
             detail_lines.append(f"触发原因：{reason}")
