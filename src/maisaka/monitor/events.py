@@ -61,7 +61,7 @@ def _extract_text_content(content: Any) -> Optional[str]:
                 if block_type == "text":
                     text_parts.append(str(block.get("text", "")))
                 elif block_type == "image_url":
-                    text_parts.append("[图片，识别中.....]")
+                    text_parts.append("[图片]")
                 else:
                     text_parts.append(f"[{block_type}]")
             elif isinstance(block, str):

@@ -87,7 +87,7 @@ def build_monitor_message_media(message: SessionMessage, *, log_prefix: str = ""
     for index, component in enumerate(message.raw_message.components):
         if isinstance(component, ImageComponent):
             media_kind = "image"
-            label = "[图片，识别中.....]"
+            label = "[图片]"
         elif isinstance(component, EmojiComponent):
             media_kind = "emoji"
             label = "[表情包]"
