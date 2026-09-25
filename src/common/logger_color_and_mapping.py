@@ -113,6 +113,8 @@ MODULE_COLORS: Dict[str, Tuple[str, Optional[str], bool]] = {
     "confirm": ("#ffff00", None, True),  # 黄色 + 粗体
     # 模型相关
     "model_utils": ("#d700d7", None, False),
+    # 作息
+    "dormancy": ("#8787af", None, False),  # 暮色石板蓝，对应安静时段
 }
 
 # 定义模块别名映射 - 将真实的logger名称映射到显示的别名
@@ -336,6 +338,8 @@ MODULE_ALIASES = {
     "A_Memorix.SummaryImporter": "记忆摘要导入",
     "A_Memorix.VectorStore": "记忆向量存储",
     "A_Memorix.WebImportManager": "网页记忆导入",
+    # 作息
+    "dormancy": "作息",
 }
 
 RESET_COLOR = "\033[0m"
