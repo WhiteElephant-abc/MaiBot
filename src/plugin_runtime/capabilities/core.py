@@ -5,6 +5,7 @@ import base64
 
 from src.common.logger import get_logger
 from src.config.config import global_config
+from src.services.dormancy_service import DormancyError
 
 logger = get_logger("plugin_runtime.integration")
 
@@ -253,6 +254,10 @@ class RuntimeCoreCapabilityMixin:
                 "visible_text": visible_text,
                 "source_kind": source_kind,
             }
+        except DormancyError as exc:
+            # 作息休眠期间拒绝唤醒会话，回一条明确原因而不是抛带栈的错误
+            logger.warning(f"[cap.maisaka.context.append] 作息休眠中，已忽略: plugin_id={plugin_id} reason={exc}")
+            return {"success": False, "error": str(exc)}
         except Exception as exc:
             logger.error(f"[cap.maisaka.context.append] 执行失败: {exc}", exc_info=True)
             return {"success": False, "error": str(exc)}
@@ -286,6 +291,10 @@ class RuntimeCoreCapabilityMixin:
                 metadata=args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
             )
             return {"success": True, **result}
+        except DormancyError as exc:
+            # 作息休眠期间拒绝唤醒会话，回一条明确原因而不是抛带栈的错误
+            logger.warning(f"[cap.maisaka.proactive.trigger] 作息休眠中，已忽略: plugin_id={plugin_id} reason={exc}")
+            return {"success": False, "error": str(exc)}
         except Exception as exc:
             logger.error(f"[cap.maisaka.proactive.trigger] 执行失败: {exc}", exc_info=True)
             return {"success": False, "error": str(exc)}

@@ -8,6 +8,7 @@ import traceback
 from src.chat.message_receive.chat_manager import chat_manager
 from src.common.logger import get_logger
 from src.maisaka.runtime import MaisakaHeartFlowChatting
+from src.services.dormancy_service import DormancyError, dormancy_service
 
 logger = get_logger("heartflow")
 
@@ -24,7 +25,18 @@ class HeartflowManager:
         self._chat_last_active_at: Dict[str, float] = {}
 
     async def get_or_create_heartflow_chat(self, session_id: str) -> MaisakaHeartFlowChatting:
-        """获取或创建指定会话对应的 Maisaka runtime。"""
+        """获取或创建指定会话对应的 Maisaka runtime。
+
+        Raises:
+            DormancyError: 作息休眠期间拒绝创建运行时。
+        """
+
+        # 闸门放在这里而不是各个调用方：入站消息、插件上下文注入、插件主动触发
+        # 都会经过本方法，只拦入站那条会让插件在睡着时把运行时重新建起来，
+        # 进而触发一轮必然被拦下的模型调用。
+        if dormancy_service.is_dormant():
+            raise DormancyError("当前处于作息休眠时段，不唤醒会话运行时")
+
         try:
             if chat := self.heartflow_chat_list.get(session_id):
                 self._touch_chat(session_id)
