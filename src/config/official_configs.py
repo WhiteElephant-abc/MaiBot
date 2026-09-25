@@ -402,9 +402,24 @@ class DormancyConfig(ConfigBase):
     )
     """提前多久提醒麦麦准备跟人道晚安。"""
 
+    announce_recent_message_minutes: int = Field(
+        default=60,
+        ge=0,
+        le=1440,
+        json_schema_extra={
+            "x-widget": "input",
+            "label": {
+                "zh_CN": "最近消息窗口（分钟）",
+                "en_US": "Recent message window (minutes)",
+                "ja_JP": "最近メッセージウィンドウ（分）",
+            },
+        },
+    )
+    """这段时间内有新消息的会话也要告别；0 表示不按这个条件判断。"""
+
     announce_bot_spoke_minutes: int = Field(
         default=60,
-        ge=1,
+        ge=0,
         le=1440,
         json_schema_extra={
             "x-widget": "input",
@@ -415,7 +430,7 @@ class DormancyConfig(ConfigBase):
             },
         },
     )
-    """只跟这段时间内麦麦自己发过言的会话说晚安，它没参与的对话不打扰。"""
+    """麦麦自己在这段时间内发过言的会话也要告别；0 表示不按这个条件判断。"""
 
     def model_post_init(self, context: Optional[dict] = None) -> None:
         """校验作息时间格式，配置写错在加载期就拒绝，避免半夜才暴露。"""
