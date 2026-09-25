@@ -403,7 +403,7 @@ class DormancyConfig(ConfigBase):
     """提前多久提醒麦麦准备跟人道晚安。"""
 
     announce_recent_message_minutes: int = Field(
-        default=60,
+        default=30,
         ge=0,
         le=1440,
         json_schema_extra={
