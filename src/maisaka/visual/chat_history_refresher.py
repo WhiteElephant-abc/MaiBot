@@ -4,6 +4,7 @@ from typing import Awaitable, Callable, Optional
 
 from sqlmodel import select
 
+from src.chat.image_system.image_manager import image_manager
 from src.chat.message_receive.message import SessionMessage
 from src.common.data_models.message_component_data_model import EmojiComponent, ForwardNodeComponent, ImageComponent
 from src.common.database.database import get_db_session
@@ -13,6 +14,7 @@ from src.config.config import config_manager
 
 from src.maisaka.context.message_adapter import build_visible_text_from_sequence
 from src.maisaka.context.messages import LLMContextMessage, SessionBackedMessage
+from src.maisaka.visual.mode_utils import is_image_description_consumed
 
 logger = get_logger("maisaka_chat_history_visual_refresher")
 
@@ -30,6 +32,8 @@ async def refresh_chat_history_visual_placeholders(
     build_visible_text: BuildVisibleText,
 ) -> int:
     """在进入新一轮规划前，尝试用已完成的识图结果刷新历史占位。"""
+
+    await ensure_pending_image_descriptions(chat_history)
 
     refreshed_count = 0
     for index, history_message in enumerate(chat_history):
@@ -67,6 +71,49 @@ async def refresh_chat_history_visual_placeholders(
         refreshed_count += 1
 
     return refreshed_count
+
+
+async def ensure_pending_image_descriptions(chat_history: list[LLMContextMessage]) -> int:
+    """在读取历史前，为仍在等待识别的图片按需触发描述构建。
+
+    写入阶段判定为无需描述而跳过的图片，会在这里按当前配置重新判断一次，
+    因此配置从纯多模态切回文本模型后，历史图片也能补上描述。
+
+    Args:
+        chat_history: 待读取的 MaiSaka 聊天历史。
+
+    Returns:
+        int: 本次新提交的描述构建请求数量。
+    """
+
+    if not is_image_description_consumed():
+        return 0
+
+    pending_image_hashes: set[str] = set()
+    for history_message in chat_history:
+        if not isinstance(history_message, SessionBackedMessage):
+            continue
+
+        original_message = history_message.original_message
+        if original_message is None:
+            components = history_message.raw_message.components
+        else:
+            components = original_message.raw_message.components
+
+        pending_image_hashes.update(_collect_pending_image_hashes(components))
+
+    requested_count = 0
+    for image_hash in pending_image_hashes:
+        try:
+            if await image_manager.schedule_missing_description(image_hash):
+                requested_count += 1
+        except Exception as exc:
+            logger.warning(f"按需补建图片描述失败，image_hash={image_hash}: {exc}")
+
+    if requested_count > 0:
+        logger.info(f"读取历史时按需提交 {requested_count} 张图片的描述构建")
+
+    return requested_count
 
 
 def has_pending_image_recognition(chat_history: list[LLMContextMessage]) -> bool:

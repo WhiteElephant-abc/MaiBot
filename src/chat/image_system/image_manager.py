@@ -14,6 +14,7 @@ from src.common.database.database_model import Images, ImageType
 from src.common.logger import get_logger
 from src.common.utils.image_path import resolve_stored_image_path, serialize_stored_image_path
 from src.config.config import config_manager
+from src.maisaka.visual.mode_utils import is_image_description_required
 from src.prompt.prompt_manager import prompt_manager
 from src.services.llm_service import LLMServiceClient
 
@@ -52,6 +53,8 @@ class ImageManager:
         """初始化图片管理器。"""
         _ensure_image_dir_exists()
         self._pending_description_tasks: Dict[str, asyncio.Task[None]] = {}
+        # 记录已经提交过构建的图片，避免识图失败后每轮都重复请求模型
+        self._requested_description_hashes: set[str] = set()
         self.cleanup_legacy_image_registration_records()
 
         logger.info("图片管理器初始化完成")
@@ -91,6 +94,9 @@ class ImageManager:
 
         如果不存在，则**保存图片**并**生成描述**后返回
 
+        若当前规划与回复链路都直接读取图片本体，描述不会被任何一方读取，
+        此时只保存图片不生成描述，直接返回空字符串
+
         Args:
             image_hash (Optional[str]): 图片的哈希值，如果提供则优先使用该
             image_bytes (Optional[bytes]): 图片的字节数据，如果提供则在数据库中找不到哈希值时使用该数据生成描述
@@ -126,6 +132,10 @@ class ImageManager:
         if not _is_vlm_task_configured():
             logger.info("未配置 VLM 模型，跳过图片识别")
             return ""
+        if not is_image_description_required(saved_image.image_format):
+            # 规划与回复都直接把图片本体交给模型，描述不会被读取，无需消耗一次识图请求
+            logger.debug(f"当前链路直接读取图片本体，跳过图片描述生成，哈希值: {hash_str}")
+            return ""
         if not wait_for_build:
             self._schedule_description_build(hash_str, image_bytes, saved_image=saved_image)
             return ""
@@ -136,6 +146,46 @@ class ImageManager:
         except Exception as e:
             logger.error(f"生成图片描述时发生错误: {e}")
             return ""
+
+    async def schedule_missing_description(self, image_hash: str) -> bool:
+        """按需为已入库图片触发一次描述构建。
+
+        读取阶段会按当前配置重新判断是否需要描述，因此配置从纯多模态切换回文本后，
+        此前跳过识图的图片会在这里补上。
+
+        Args:
+            image_hash: 图片哈希值。
+
+        Returns:
+            bool: 是否新提交了一次构建请求。
+        """
+
+        if not image_hash or image_hash in self._pending_description_tasks:
+            return False
+        if image_hash in self._requested_description_hashes:
+            return False
+
+        record = self._get_image_record(image_hash)
+        if record is None or record.no_file_flag:
+            return False
+        if record.vlm_processed and record.description:
+            return False
+        if not _is_vlm_task_configured():
+            return False
+
+        image = MaiImage.from_db_instance(record)
+        if not is_image_description_required(image.image_format):
+            logger.debug(f"当前链路直接读取图片本体，无需补建图片描述，哈希值: {image_hash}")
+            return False
+        if not image.full_path.is_file():
+            logger.warning(f"图片文件不存在，无法补建描述，哈希值: {image_hash}")
+            return False
+
+        image_bytes = await asyncio.to_thread(image.read_image_bytes, image.full_path)
+        self._requested_description_hashes.add(image_hash)
+        self._schedule_description_build(image_hash, image_bytes, saved_image=image)
+        logger.info(f"读取阶段按需补建图片描述，哈希值: {image_hash}")
+        return True
 
     def _schedule_description_build(
         self,
