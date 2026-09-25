@@ -328,6 +328,21 @@ class BaseClient(ABC):
         """
         self.api_provider = api_provider
 
+    @staticmethod
+    def ensure_not_dormant() -> None:
+        """休眠期间拦下所有模型请求。
+
+        每个具体客户端的 get_response / get_embedding / get_audio_transcriptions
+        都要在入口调用本方法。放在这一层是因为它是模型请求真正的最底层：
+        `LLMOrchestrator` 只覆盖走编排器的调用，而 `client_registry` 可以被直接使用
+        （A_Memorix 的 EmbeddingAPIAdapter 就是这么做的），只拦编排器会漏。
+        """
+
+        from src.services.dormancy_service import DormancyError, dormancy_service
+
+        if dormancy_service.should_block_model_call():
+            raise DormancyError("当前处于作息休眠时段，本次模型请求已被拦下")
+
     @abstractmethod
     async def get_response(self, request: ResponseRequest) -> APIResponse:
         """获取对话响应。

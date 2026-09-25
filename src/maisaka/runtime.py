@@ -393,14 +393,10 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         if not notice_text:
             return
 
-        self._chat_history.append(
-            ReferenceMessage(
-                content=notice_text,
-                timestamp=datetime.now(),
-                reference_type=ReferenceMessageType.DORMANCY_WAKE,
-                remaining_uses_value=1,
-                display_prefix="[作息苏醒]",
-            )
+        self.enqueue_state_notice(
+            content=notice_text,
+            reference_type=ReferenceMessageType.DORMANCY_WAKE,
+            display_prefix="[作息苏醒]",
         )
         logger.info(f"{self.log_prefix} 已注入作息苏醒提示")
 
@@ -764,7 +760,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             "queued": True,
         }
 
-    def _build_proactive_trigger_message(self, task_id: str) -> SessionMessage:
+    def _build_proactive_trigger_message(self, task_id: str, label: str = "插件主动聊天任务") -> SessionMessage:
         """构造主动任务触发消息，不写入消息数据库。"""
 
         message = SessionMessage(
@@ -778,8 +774,8 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             group_info=self._build_group_info(),
             additional_config={},
         )
-        message.raw_message = MessageSequence([TextComponent("插件主动聊天任务")])
-        message.processed_plain_text = "插件主动聊天任务"
+        message.raw_message = MessageSequence([TextComponent(label)])
+        message.processed_plain_text = label
         return message
 
     def _queue_proactive_turn(
@@ -794,6 +790,50 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         self._proactive_logical_turn_id = logical_turn_id
         self._resume_from_wait_for_proactive_trigger()
         self._internal_turn_queue.put_nowait("proactive")
+
+    def enqueue_state_notice(
+        self,
+        *,
+        content: str,
+        reference_type: ReferenceMessageType,
+        display_prefix: str,
+        reason: str = "",
+        trigger_turn: bool = False,
+    ) -> Optional[str]:
+        """注入一条关于麦麦自身状态的参考消息，供 Planner 判断当前局面。
+
+        与插件主动任务不同，这里刻意不伪造成一条聊天消息：replyer 只负责把话写好，
+        局面判断属于 Planner，判断结果会经由「当前思考」传给 replyer。作息这类
+        内置状态因此走参考消息通道，replyer 侧看不到，也不会占用上下文窗口。
+
+        Args:
+            content: 状态说明正文。
+            reference_type: 参考消息类型，用于区分不同状态来源。
+            display_prefix: 注入到 Prompt 里的前缀标签。
+            reason: 强制触发时记录的原因。
+            trigger_turn: 是否顺带强制触发一轮（就寝提醒需要麦麦主动开口）。
+
+        Returns:
+            Optional[str]: 触发时返回任务 ID，仅注入不触发时返回 None。
+        """
+
+        self._chat_history.append(
+            ReferenceMessage(
+                content=content,
+                timestamp=datetime.now(),
+                reference_type=reference_type,
+                remaining_uses_value=1,
+                display_prefix=display_prefix,
+            )
+        )
+        if not trigger_turn:
+            return None
+
+        task_id = f"state_notice:{reference_type.value}:{int(time.time() * 1000)}"
+        self._arm_forced_turn_state(message_id=task_id, reason=reason or reference_type.value)
+        self._queue_proactive_turn(self._build_proactive_trigger_message(task_id, label=display_prefix))
+        logger.info(f"{self.log_prefix} 已注入状态参考并触发一轮: type={reference_type.value}")
+        return task_id
 
     def _consume_proactive_trigger_message(self) -> Optional[SessionMessage]:
         """消费当前主动触发消息。"""

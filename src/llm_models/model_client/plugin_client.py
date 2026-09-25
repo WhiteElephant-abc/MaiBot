@@ -67,6 +67,7 @@ class PluginLLMClient(BaseClient):
         Raises:
             RespParseException: 插件返回内容无法转换为统一响应时抛出。
         """
+        self.ensure_not_dormant()
         if request.stream_response_handler is not None or request.async_response_parser is not None:
             raise RespParseException(message="插件 LLM Provider 暂不支持 Host 侧自定义流式处理器或响应解析器")
         validate_context_items(request.context_items, ContextProtocolMode.REQUEST_CONTEXT)
@@ -106,6 +107,7 @@ class PluginLLMClient(BaseClient):
         Returns:
             APIResponse: 嵌入响应。
         """
+        self.ensure_not_dormant()
         result = await self._invoke_provider("embedding", serialize_embedding_request_snapshot(request))
         return self._build_api_response(result, request.model_info.name, request.model_info.api_provider)
 
@@ -118,6 +120,7 @@ class PluginLLMClient(BaseClient):
         Returns:
             APIResponse: 音频转录响应。
         """
+        self.ensure_not_dormant()
         result = await self._invoke_provider("audio_transcription", serialize_audio_request_snapshot(request))
         return self._build_api_response(result, request.model_info.name, request.model_info.api_provider)
 

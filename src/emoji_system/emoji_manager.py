@@ -436,6 +436,11 @@ class EmojiManager:
             emoji_hash: 表情包哈希值。
             emoji_bytes: 表情包字节数据。
         """
+        if dormancy_service.is_dormant():
+            # 作息休眠期间不排队：这里排的就是一次视觉模型调用，睡着时既拿不到结果，
+            # 又会在闸门处抛错，只在日志里留下一串无意义的构建失败
+            return
+
         if not _is_vlm_task_configured():
             logger.info("未配置 VLM 模型，跳过表情包后台识别任务")
             return

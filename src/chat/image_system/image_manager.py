@@ -16,6 +16,7 @@ from src.common.utils.image_path import resolve_stored_image_path, serialize_sto
 from src.config.config import config_manager
 from src.maisaka.visual.mode_utils import is_image_description_required
 from src.prompt.prompt_manager import prompt_manager
+from src.services.dormancy_service import dormancy_service
 from src.services.llm_service import LLMServiceClient
 
 install(extra_lines=3)
@@ -201,6 +202,11 @@ class ImageManager:
             image_bytes: 图片字节数据。
             saved_image: 已保存的图片对象，避免后台任务重复执行保存流程。
         """
+        if dormancy_service.is_dormant():
+            # 作息休眠期间不排队，理由同表情包侧：睡着时这次调用必然被闸门拦下，
+            # 排了只会留下无意义的构建失败日志
+            return
+
         if not _is_vlm_task_configured():
             logger.info("未配置 VLM 模型，跳过图片后台识别任务")
             return

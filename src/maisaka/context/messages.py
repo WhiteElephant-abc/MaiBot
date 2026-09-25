@@ -453,6 +453,7 @@ class ReferenceMessageType(str, Enum):
     BEHAVIOR_PATTERN = "behavior_pattern"
     CONTEXT_RESTORE = "context_restore"
     CUSTOM = "custom"
+    DORMANCY_SLEEP = "dormancy_sleep"
     DORMANCY_WAKE = "dormancy_wake"
     JARGON = "jargon"
     MEMORY = "memory"

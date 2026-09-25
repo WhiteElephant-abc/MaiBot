@@ -316,7 +316,10 @@ class DormancyService:
         不按该条件判断，可以只用其中一个。
         """
 
+        # 这条导入必须留在函数内：reference_type 定义在 maisaka.context.messages，
+        # 而它的依赖链会绕回 chat.message_receive.bot，后者在模块级导入本模块
         from src.chat.heart_flow.heartflow_manager import heartflow_manager
+        from src.maisaka.context.messages import ReferenceMessageType
 
         message_window_seconds = int(global_config.dormancy.announce_recent_message_minutes) * 60
         spoke_window_seconds = int(global_config.dormancy.announce_bot_spoke_minutes) * 60
@@ -335,18 +338,20 @@ class DormancyService:
             if not (has_recent_message or has_recent_speech):
                 continue
             try:
-                await runtime.enqueue_proactive_task(
-                    plugin_id="dormancy",
-                    intent=(
-                        f"现在已经到了你的就寝时间（{sleep_time}），你准备去睡觉了。"
+                runtime.enqueue_state_notice(
+                    content=(
+                        "这是作息系统的就寝提醒，不代表当前用户刚刚发来新消息。\n"
+                        f"现在已经到了你的就寝时间（{sleep_time}），你准备去睡觉了。\n"
                         "请让正在聊天的人知道你要去睡了。"
                     ),
-                    reason="作息系统睡前提醒",
-                    intro="作息安排提醒",
+                    reference_type=ReferenceMessageType.DORMANCY_SLEEP,
+                    display_prefix="[作息提醒]",
+                    reason="作息系统就寝提醒",
+                    trigger_turn=True,
                 )
                 announced_count += 1
             except Exception as exc:
-                logger.warning(f"{runtime.log_prefix} 注入睡前意图失败: {exc}")
+                logger.warning(f"{runtime.log_prefix} 注入就寝提醒失败: {exc}")
 
         logger.info(f"睡前告别已提交给 {announced_count} 个相关会话")
 

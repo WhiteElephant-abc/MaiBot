@@ -13,6 +13,7 @@ from typing_extensions import TypedDict
 
 from src.common.logger import get_logger
 from src.manager.async_task_manager import AsyncTask
+from src.services.dormancy_service import dormancy_service
 
 if TYPE_CHECKING:
     from src.webui.schemas.statistics import (
@@ -492,6 +493,11 @@ class StatisticOutputTask(AsyncTask):
         logger.info("\n" + "\n".join(output))
 
     async def run(self):
+        # 作息休眠期间跳过：这里每次会输出一整块多行报表，睡着时没有产出、
+        # 也刷不出有价值的信息，只是把日志淹掉
+        if dormancy_service.is_dormant():
+            return
+
         try:
             now = datetime.now()
             self._ensure_all_time_start_time(now)
@@ -534,6 +540,10 @@ class StatisticOutputTask(AsyncTask):
         """
 
         async def _async_collect_and_output():
+            # 作息休眠期间跳过，理由同 StatisticOutputTask.run
+            if dormancy_service.is_dormant():
+                return
+
             try:
                 import concurrent.futures
 

@@ -98,6 +98,7 @@ class AdapterClient(BaseClient, ABC, Generic[RawStreamT, RawResponseT]):
         Returns:
             APIResponse: 解析完成的统一响应对象。
         """
+        self.ensure_not_dormant()
         validate_context_items(request.context_items, ContextProtocolMode.REQUEST_CONTEXT)
         stream_response_handler = self._resolve_stream_response_handler(request)
         response_parser = self._resolve_response_parser(request)
@@ -125,6 +126,7 @@ class AdapterClient(BaseClient, ABC, Generic[RawStreamT, RawResponseT]):
         Returns:
             APIResponse: 解析完成的统一嵌入响应。
         """
+        self.ensure_not_dormant()
         response, usage_record = await self._execute_embedding_request(request)
         return self._attach_usage_record(response, request.model_info, usage_record)
 
@@ -137,6 +139,7 @@ class AdapterClient(BaseClient, ABC, Generic[RawStreamT, RawResponseT]):
         Returns:
             APIResponse: 解析完成的统一音频转录响应。
         """
+        self.ensure_not_dormant()
         response, usage_record = await self._execute_audio_transcription_request(request)
         return self._attach_usage_record(response, request.model_info, usage_record)
 
