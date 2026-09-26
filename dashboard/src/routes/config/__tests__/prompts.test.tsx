@@ -80,7 +80,6 @@ function makePromptContent(
 ): PromptFileContent {
   return {
     success: true,
-    language: 'zh-CN',
     filename,
     content,
     customized: true,
@@ -107,8 +106,7 @@ function makeCatalog(
 ): PromptCatalog {
   return {
     success: true,
-    languages: ['zh-CN'],
-    files: { 'zh-CN': files },
+    files,
     ...overrides,
   }
 }
@@ -170,10 +168,10 @@ beforeEach(() => {
   }
 
   vi.mocked(promptApi.getPromptCatalog).mockResolvedValue(catalog)
-  vi.mocked(promptApi.getPromptFile).mockImplementation((_, filename) =>
+  vi.mocked(promptApi.getPromptFile).mockImplementation((filename) =>
     Promise.resolve(makePromptContent(filename, `${filename} current`))
   )
-  vi.mocked(promptApi.getDefaultPromptFile).mockImplementation((_, filename) =>
+  vi.mocked(promptApi.getDefaultPromptFile).mockImplementation((filename) =>
     Promise.resolve(makePromptContent(filename, `${filename} default`))
   )
 })
@@ -266,16 +264,16 @@ describe('PromptManagementPage', () => {
     await user.click(screen.getByRole('button', { name: /保存为新版本/ }))
 
     await waitFor(() => {
-      expect(promptApi.updatePromptFile).toHaveBeenCalledWith('zh-CN', 'first.prompt', '新版本内容', {
+      expect(promptApi.updatePromptFile).toHaveBeenCalledWith('first.prompt', '新版本内容', {
         versionId: null,
         createVersion: true,
       })
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Prompt 已保存',
-      description: 'zh-CN/first.prompt',
+      description: 'first.prompt',
     })
-    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`)).toBe('v-new')
+    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.first.prompt`)).toBe('v-new')
     expect(promptApi.getPromptCatalog).toHaveBeenCalledTimes(2)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^已保存$/ })).toBeDisabled()
@@ -312,22 +310,22 @@ describe('PromptManagementPage', () => {
     )
     const { user } = await renderReady('v1 内容')
 
-    await chooseComboboxOption(user, 1, /版本 2/)
-    await waitFor(() => expect(promptApi.getPromptVersionFile).toHaveBeenCalledWith('zh-CN', 'first.prompt', 'v2'))
+    await chooseComboboxOption(user, 0, /版本 2/)
+    await waitFor(() => expect(promptApi.getPromptVersionFile).toHaveBeenCalledWith('first.prompt', 'v2'))
     await screen.findByDisplayValue('v2 内容')
 
     setEditorValue('改过的 v2')
     await user.click(screen.getByRole('button', { name: /保存修改/ }))
 
     await waitFor(() => {
-      expect(promptApi.updatePromptFile).toHaveBeenCalledWith('zh-CN', 'first.prompt', '改过的 v2', {
+      expect(promptApi.updatePromptFile).toHaveBeenCalledWith('first.prompt', '改过的 v2', {
         versionId: 'v2',
         createVersion: false,
       })
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Prompt 已保存',
-      description: 'zh-CN/first.prompt',
+      description: 'first.prompt',
     })
   })
 
@@ -343,13 +341,13 @@ describe('PromptManagementPage', () => {
     await user.click(screen.getByRole('button', { name: /应用此版本/ }))
 
     await waitFor(() => {
-      expect(promptApi.resetPromptFile).toHaveBeenCalledWith('zh-CN', 'first.prompt')
+      expect(promptApi.resetPromptFile).toHaveBeenCalledWith('first.prompt')
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: '已应用 Prompt 版本',
-      description: 'zh-CN/first.prompt',
+      description: 'first.prompt',
     })
-    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`)).toBe(
+    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.first.prompt`)).toBe(
       '__default__'
     )
     await screen.findByDisplayValue('恢复后的默认')
@@ -385,18 +383,18 @@ describe('PromptManagementPage', () => {
     )
     const { user } = await renderReady('v1 内容')
 
-    await chooseComboboxOption(user, 1, /版本 2/)
+    await chooseComboboxOption(user, 0, /版本 2/)
     await screen.findByDisplayValue('v2 内容')
     await user.click(screen.getByRole('button', { name: /应用此版本/ }))
 
     await waitFor(() => {
-      expect(promptApi.activatePromptVersion).toHaveBeenCalledWith('zh-CN', 'first.prompt', 'v2')
+      expect(promptApi.activatePromptVersion).toHaveBeenCalledWith('first.prompt', 'v2')
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: '已应用 Prompt 版本',
-      description: 'zh-CN/first.prompt',
+      description: 'first.prompt',
     })
-    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`)).toBe('v2')
+    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.first.prompt`)).toBe('v2')
   })
 
   it('删除当前启用的自定义版本会经确认后恢复默认版本', async () => {
@@ -420,13 +418,13 @@ describe('PromptManagementPage', () => {
     await user.click(screen.getByRole('button', { name: '确认删除' }))
 
     await waitFor(() => {
-      expect(promptApi.deletePromptVersion).toHaveBeenCalledWith('zh-CN', 'first.prompt', 'v1')
+      expect(promptApi.deletePromptVersion).toHaveBeenCalledWith('first.prompt', 'v1')
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Prompt 版本已删除',
-      description: '版本 1 · zh-CN/first.prompt',
+      description: '版本 1 · first.prompt',
     })
-    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`)).toBe(
+    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.first.prompt`)).toBe(
       '__default__'
     )
     await screen.findByDisplayValue('默认内容')
@@ -459,7 +457,7 @@ describe('PromptManagementPage', () => {
     cleanup()
     toastMock.mockClear()
 
-    vi.mocked(promptApi.getPromptFile).mockImplementation((_, filename) =>
+    vi.mocked(promptApi.getPromptFile).mockImplementation((filename) =>
       Promise.resolve(makePromptContent(filename, `${filename} current`))
     )
     const { user } = await renderReady('first.prompt current')
@@ -523,7 +521,7 @@ describe('PromptManagementPage', () => {
     const { user } = await renderReady('原稿')
 
     setEditorValue('还没保存')
-    await chooseComboboxOption(user, 1, /版本 2/)
+    await chooseComboboxOption(user, 0, /版本 2/)
 
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith({
@@ -549,7 +547,7 @@ describe('PromptManagementPage', () => {
     vi.mocked(promptApi.getPromptVersionFile).mockRejectedValue(new Error('版本丢了'))
     const { user } = await renderReady('原稿')
 
-    await chooseComboboxOption(user, 1, /版本 2/)
+    await chooseComboboxOption(user, 0, /版本 2/)
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith({
         title: '切换 Prompt 版本失败',
@@ -564,7 +562,7 @@ describe('PromptManagementPage', () => {
     await user.click(screen.getByRole('button', { name: /查看默认/ }))
 
     expect(await screen.findByRole('heading', { name: '默认 Prompt' })).toBeInTheDocument()
-    expect(screen.getByText(/zh-CN\/first.prompt 的内置模板/)).toBeInTheDocument()
+    expect(screen.getByText(/first.prompt 的内置模板/)).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByTestId('readonly-code-editor')).toHaveValue('first.prompt default')
     })
@@ -624,7 +622,7 @@ describe('PromptManagementPage', () => {
         }),
       ])
     )
-    vi.mocked(promptApi.getPromptFile).mockImplementation((_, filename) =>
+    vi.mocked(promptApi.getPromptFile).mockImplementation((filename) =>
       Promise.resolve(
         makePromptContent(filename, `${filename} current`, {
           versions:
@@ -654,75 +652,26 @@ describe('PromptManagementPage', () => {
     await screen.findByDisplayValue('first.prompt current')
   })
 
-  it('切换语言会清空搜索并选中目标语言的第一个可见文件', async () => {
-    vi.mocked(promptApi.getPromptCatalog).mockResolvedValue(
-      makeCatalog(
-        [
-          makeFileInfo(),
-          makeFileInfo({ name: 'second.prompt', display_name: '第二 Prompt', size: 14 }),
-        ],
-        {
-          languages: ['zh-CN', 'en'],
-          files: {
-            'zh-CN': [
-              makeFileInfo(),
-              makeFileInfo({ name: 'second.prompt', display_name: '第二 Prompt', size: 14 }),
-            ],
-            en: [
-              makeFileInfo({
-                name: 'english.prompt',
-                display_name: 'English Prompt',
-                size: 2048,
-                description: 'English only',
-              }),
-            ],
-          },
-        }
-      )
-    )
-    const { user } = await renderReady()
-
-    await user.type(screen.getByPlaceholderText('搜索'), '第一')
-    expect(screen.queryByRole('button', { name: /第二 Prompt/ })).not.toBeInTheDocument()
-
-    await chooseComboboxOption(user, 0, 'en')
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('搜索')).toHaveValue('')
-    })
-    await screen.findByRole('button', { name: /English Prompt/ })
-    await screen.findByDisplayValue('english.prompt current')
-    expect(screen.getByText(/en · 2\.0 KB/)).toBeInTheDocument()
-  })
-
-  it('刷新目录时会按当前语言回退，并在当前文件消失后改选第一个基础文件', async () => {
-    const enOnly = makeCatalog(
-      [makeFileInfo({ name: 'english.prompt', display_name: 'English Prompt', size: 2097152 })],
-      {
-        languages: ['en'],
-        files: {
-          en: [makeFileInfo({ name: 'english.prompt', display_name: 'English Prompt', size: 2097152 })],
-        },
-      }
-    )
+  it('刷新目录时当前文件消失后改选第一个基础文件', async () => {
+    const replaced = makeCatalog([
+      makeFileInfo({ name: 'english.prompt', display_name: 'English Prompt', size: 2097152 }),
+    ])
     vi.mocked(promptApi.getPromptCatalog)
-      .mockResolvedValueOnce(makeCatalog(undefined, { languages: ['zh-CN', 'en'], files: {
-        'zh-CN': catalog.files['zh-CN'],
-        en: [makeFileInfo({ name: 'english.prompt', display_name: 'English Prompt' })],
-      } }))
-      .mockResolvedValue(enOnly)
+      .mockResolvedValueOnce(makeCatalog())
+      .mockResolvedValue(replaced)
 
     const { user } = await renderReady()
     await user.click(screen.getByRole('button', { name: '刷新' }))
 
     await screen.findByRole('button', { name: /English Prompt/ })
     await screen.findByDisplayValue('english.prompt current')
-    expect(screen.getByText(/en · 2\.0 MB/)).toBeInTheDocument()
+    expect(screen.getByText(/2\.0 MB/)).toBeInTheDocument()
   })
 
   it('会读取本地保存的版本：默认模板、指定版本、无效记录分别走不同加载路径', async () => {
-    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`, '__default__')
-    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.zh-CN/second.prompt`, 'v2')
-    vi.mocked(promptApi.getPromptFile).mockImplementation((_, filename) =>
+    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.first.prompt`, '__default__')
+    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.second.prompt`, 'v2')
+    vi.mocked(promptApi.getPromptFile).mockImplementation((filename) =>
       Promise.resolve(
         makePromptContent(filename, `${filename} active`, {
           active_version_id: 'v1',
@@ -747,20 +696,20 @@ describe('PromptManagementPage', () => {
     )
 
     const { user } = await renderReady('持久化默认内容')
-    expect(promptApi.getDefaultPromptFile).toHaveBeenCalledWith('zh-CN', 'first.prompt')
+    expect(promptApi.getDefaultPromptFile).toHaveBeenCalledWith('first.prompt')
 
     await user.click(screen.getByRole('button', { name: /第二 Prompt/ }))
     await screen.findByDisplayValue('持久化 v2 内容')
-    expect(promptApi.getPromptVersionFile).toHaveBeenCalledWith('zh-CN', 'second.prompt', 'v2')
+    expect(promptApi.getPromptVersionFile).toHaveBeenCalledWith('second.prompt', 'v2')
 
-    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`, 'already-gone')
+    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.first.prompt`, 'already-gone')
     await user.click(screen.getByRole('button', { name: /第一 Prompt/ }))
     await screen.findByDisplayValue('first.prompt active')
   })
 
   it('卸载或快速切换文件时，过期的读取失败不会再弹 toast', async () => {
     const firstLoad = deferred<PromptFileContent>()
-    vi.mocked(promptApi.getPromptFile).mockImplementation((_, filename) => {
+    vi.mocked(promptApi.getPromptFile).mockImplementation((filename) => {
       if (filename === 'first.prompt') return firstLoad.promise
       return Promise.resolve(makePromptContent(filename, `${filename} current`))
     })
@@ -792,21 +741,8 @@ describe('PromptManagementPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('缺少 {name}')
   })
 
-  it('没有语言时清空编辑器，文件大小按 B/KB 展示', async () => {
-    vi.mocked(promptApi.getPromptCatalog).mockResolvedValue(
-      makeCatalog(
-        [
-          makeFileInfo({ size: 13 }),
-          makeFileInfo({
-            name: 'second.prompt',
-            display_name: '',
-            size: 1536,
-            customized: false,
-          }),
-        ],
-        { languages: [], files: {} }
-      )
-    )
+  it('目录为空时清空编辑器并提示无可编辑文件', async () => {
+    vi.mocked(promptApi.getPromptCatalog).mockResolvedValue(makeCatalog([]))
     render(<PromptManagementPage />)
     await waitFor(() => {
       expect(screen.getByText('没有可编辑的 Prompt 文件')).toBeInTheDocument()
@@ -834,10 +770,10 @@ describe('PromptManagementPage', () => {
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith({
         title: 'Prompt 已保存',
-        description: 'zh-CN/first.prompt',
+        description: 'first.prompt',
       })
     })
-    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`)).toBe(
+    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.first.prompt`)).toBe(
       '__default__'
     )
     expect(screen.getByRole('button', { name: /^已保存$/ })).toBeDisabled()
@@ -859,7 +795,7 @@ describe('PromptManagementPage', () => {
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith({
         title: '已应用 Prompt 版本',
-        description: 'zh-CN/first.prompt',
+        description: 'first.prompt',
       })
     })
     await screen.findByDisplayValue('已重置')
@@ -884,10 +820,10 @@ describe('PromptManagementPage', () => {
     const { user } = await renderReady('启用中的版本')
 
     expect(screen.getByRole('button', { name: /已应用/ })).toBeDisabled()
-    await chooseComboboxOption(user, 1, /默认版本/)
+    await chooseComboboxOption(user, 0, /默认版本/)
     await screen.findByDisplayValue('出厂默认')
-    expect(promptApi.getDefaultPromptFile).toHaveBeenCalledWith('zh-CN', 'first.prompt')
-    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.zh-CN/first.prompt`)).toBe(
+    expect(promptApi.getDefaultPromptFile).toHaveBeenCalledWith('first.prompt')
+    expect(window.localStorage.getItem(`${VERSION_STORAGE_PREFIX}.first.prompt`)).toBe(
       '__default__'
     )
     // 目录里 customized=false 时，选中默认版本仍视为已应用
@@ -895,8 +831,8 @@ describe('PromptManagementPage', () => {
   })
 
   it('对比模式下若本地记的是默认版本，切换文件会复用默认内容而不再请求一次', async () => {
-    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.zh-CN/second.prompt`, '__default__')
-    vi.mocked(promptApi.getPromptFile).mockImplementation((_, filename) =>
+    window.localStorage.setItem(`${VERSION_STORAGE_PREFIX}.second.prompt`, '__default__')
+    vi.mocked(promptApi.getPromptFile).mockImplementation((filename) =>
       Promise.resolve(
         makePromptContent(filename, `${filename} active`, {
           active_version_id: 'v1',
@@ -904,7 +840,7 @@ describe('PromptManagementPage', () => {
         })
       )
     )
-    vi.mocked(promptApi.getDefaultPromptFile).mockImplementation((_, filename) =>
+    vi.mocked(promptApi.getDefaultPromptFile).mockImplementation((filename) =>
       Promise.resolve(makePromptContent(filename, `${filename} default`))
     )
     const { user } = await renderReady('first.prompt active')
@@ -920,31 +856,7 @@ describe('PromptManagementPage', () => {
     })
     // 持久化默认版本时，文件加载本身就会取 default，对比面板直接复用，不再多打一次
     expect(vi.mocked(promptApi.getDefaultPromptFile).mock.calls.length).toBe(callsAfterEnterDiff + 1)
-    expect(promptApi.getDefaultPromptFile).toHaveBeenLastCalledWith('zh-CN', 'second.prompt')
+    expect(promptApi.getDefaultPromptFile).toHaveBeenLastCalledWith('second.prompt')
   })
 
-  it('目录回退到既不含当前语言也不含中文时，使用返回的第一种语言', async () => {
-    vi.mocked(promptApi.getPromptCatalog)
-      .mockResolvedValueOnce(
-        makeCatalog(undefined, {
-          languages: ['zh-CN', 'ja'],
-          files: {
-            'zh-CN': catalog.files['zh-CN'],
-            ja: [makeFileInfo({ name: 'jp.prompt', display_name: '日本語', size: 20 })],
-          },
-        })
-      )
-      .mockResolvedValue(
-        makeCatalog(undefined, {
-          languages: ['ja'],
-          files: {
-            ja: [makeFileInfo({ name: 'jp.prompt', display_name: '日本語', size: 20 })],
-          },
-        })
-      )
-    const { user } = await renderReady()
-    await user.click(screen.getByRole('button', { name: '刷新' }))
-    await screen.findByRole('button', { name: /日本語/ })
-    await screen.findByDisplayValue('jp.prompt current')
-  })
 })

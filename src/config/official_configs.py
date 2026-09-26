@@ -58,44 +58,6 @@ def build_personality_emotion_suffix(emotion_trait: str) -> str:
     return PERSONALITY_EMOTION_SUFFIXES[emotion_trait]
 
 
-ATTENTION_DRIFT_LEVEL_OPTION_LABELS = {
-    "subtle": "轻微漂移",
-    "active": "活跃联想",
-    "scattered": "明显发散",
-    "wild": "强烈跳跃",
-}
-
-ATTENTION_DRIFT_LEVEL_OPTION_DESCRIPTIONS = {
-    "subtle": "只在很自然的触发点上轻轻联想一句，整体仍跟随当前话题。",
-    "active": "允许更主动地抓有趣支线，但回复仍应保持清楚、短促、可追溯。",
-    "scattered": "会更明显地抓支线和突然联想，回复里可以出现可理解的拐弯。",
-    "wild": "强实验档位；可以有更强的跳跃、插话和突然联想，但必须能从最近消息找到触发点。",
-}
-
-ATTENTION_DRIFT_ANCHOR_OPTION_LABELS = {
-    "strict": "严格回钩",
-    "balanced": "自然回钩",
-    "loose": "宽松关联",
-}
-
-ATTENTION_DRIFT_ANCHOR_OPTION_DESCRIPTIONS = {
-    "strict": "每次联想后都要快速拉回当前话题，适合技术群或严肃场景。",
-    "balanced": "可以短暂支线联想，但通常要让回复和最近消息保持明显关系。",
-    "loose": "允许更自由的相关联想，但仍必须能从最近消息找到触发点。",
-}
-
-ATTENTION_DRIFT_REACTION_OPTION_LABELS = {
-    "reserved": "少量短反应",
-    "natural": "自然短反应",
-    "lively": "活泼短反应",
-}
-
-ATTENTION_DRIFT_REACTION_OPTION_DESCRIPTIONS = {
-    "reserved": "短反应很少出现，只在特别好接的话题上使用。",
-    "natural": "偶尔先用短句、吐槽或语气词接住话题，再继续回复。",
-    "lively": "更容易先用短促反应开头，但不能把回复拆得太碎。",
-}
-
 """
 须知：
 1. 本文件中记录了所有的配置项
@@ -1004,80 +966,6 @@ class ChatConfig(ConfigBase):
     """如何回复、引用回复与聊天 Prompt 配置。"""
 
 
-class AttentionDriftConfig(ConfigBase):
-    """注意力漂移实验功能配置。"""
-
-    __ui_label__ = "注意力漂移"
-    __ui_icon__ = "sparkles"
-
-    enabled: bool = Field(
-        default=False,
-        json_schema_extra={
-            "label": {
-                "zh_CN": "注意力漂移模式",
-                "en_US": "Attention drift mode",
-                "ja_JP": "注意ドリフトモード",
-            },
-            "x-widget": "switch",
-        },
-    )
-    """开启后，麦麦会更容易被有趣的新话题、梗或反差点吸引，但仍需保持上下文可理解。"""
-
-    drift_level: Literal["subtle", "active", "scattered", "wild"] = Field(
-        default="scattered",
-        json_schema_extra={
-            "label": {
-                "zh_CN": "漂移档位",
-                "en_US": "Drift level",
-                "ja_JP": "ドリフト段階",
-            },
-            "x-widget": "select",
-            "x-layout": "inline-right",
-            "x-input-width": "12rem",
-            "x-option-labels": ATTENTION_DRIFT_LEVEL_OPTION_LABELS,
-            "x-option-descriptions": ATTENTION_DRIFT_LEVEL_OPTION_DESCRIPTIONS,
-            "x-row": "attention-drift-style",
-        },
-    )
-    """控制注意力漂移的整体表现档位，而不是用数值概率描述。"""
-
-    anchor_policy: Literal["strict", "balanced", "loose"] = Field(
-        default="balanced",
-        json_schema_extra={
-            "label": {
-                "zh_CN": "回钩策略",
-                "en_US": "Anchor policy",
-                "ja_JP": "アンカー方針",
-            },
-            "x-widget": "select",
-            "x-layout": "inline-right",
-            "x-input-width": "12rem",
-            "x-option-labels": ATTENTION_DRIFT_ANCHOR_OPTION_LABELS,
-            "x-option-descriptions": ATTENTION_DRIFT_ANCHOR_OPTION_DESCRIPTIONS,
-            "x-row": "attention-drift-style",
-        },
-    )
-    """控制话题漂移后需要多强地回到当前聊天上下文。"""
-
-    reaction_style: Literal["reserved", "natural", "lively"] = Field(
-        default="lively",
-        json_schema_extra={
-            "label": {
-                "zh_CN": "短反应风格",
-                "en_US": "Short reaction style",
-                "ja_JP": "短い反応スタイル",
-            },
-            "x-widget": "select",
-            "x-layout": "inline-right",
-            "x-input-width": "12rem",
-            "x-option-labels": ATTENTION_DRIFT_REACTION_OPTION_LABELS,
-            "x-option-descriptions": ATTENTION_DRIFT_REACTION_OPTION_DESCRIPTIONS,
-            "x-row": "attention-drift-reaction",
-        },
-    )
-    """控制短句、吐槽、语气词等短反应在漂移风格中的使用方式。"""
-
-
 class ExperimentalConfig(ConfigBase):
     """实验性功能配置类"""
 
@@ -1127,9 +1015,6 @@ class ExperimentalConfig(ConfigBase):
         },
     )
     """实验性人格情绪特点；理性冷静和多愁善感会追加人格后缀，中性不追加内容。"""
-
-    attention_drift: AttentionDriftConfig = Field(default_factory=AttentionDriftConfig)
-    """注意力漂移实验模式；让麦麦在群聊/私聊中表现出更活跃的联想和轻微话题漂移。"""
 
     behavior_learning_list: list["LearningItem"] = Field(
         default_factory=lambda: [

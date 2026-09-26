@@ -38,7 +38,6 @@ const deleteMock = vi.mocked(backendApi.delete)
 function makeFileContent(overrides: Partial<PromptFileContent> = {}): PromptFileContent {
   return {
     success: true,
-    language: 'zh',
     filename: 'planner.txt',
     content: '模板内容',
     customized: false,
@@ -65,8 +64,7 @@ describe('getPromptCatalog', () => {
   it('请求 Prompt 目录并原样返回响应', async () => {
     const catalog: PromptCatalog = {
       success: true,
-      languages: ['zh', 'en'],
-      files: { zh: [] },
+      files: [],
     }
     getMock.mockResolvedValue(catalog)
 
@@ -84,12 +82,12 @@ describe('getPromptCatalog', () => {
 })
 
 describe('getPromptFile', () => {
-  it('对语言与文件名做 URL 编码后请求文件内容', async () => {
+  it('对文件名做 URL 编码后请求文件内容', async () => {
     const content = makeFileContent()
     getMock.mockResolvedValue(content)
 
-    await expect(getPromptFile('zh', 'group chat.txt')).resolves.toBe(content)
-    expect(getMock).toHaveBeenCalledWith('/api/webui/config/prompts/zh/group%20chat.txt', {
+    await expect(getPromptFile('group chat.txt')).resolves.toBe(content)
+    expect(getMock).toHaveBeenCalledWith('/api/webui/config/prompts/group%20chat.txt', {
       errorMessage: '获取 Prompt 文件失败',
     })
   })
@@ -100,8 +98,8 @@ describe('getDefaultPromptFile', () => {
     const content = makeFileContent()
     getMock.mockResolvedValue(content)
 
-    await expect(getDefaultPromptFile('zh', 'planner.txt')).resolves.toBe(content)
-    expect(getMock).toHaveBeenCalledWith('/api/webui/config/prompts/zh/planner.txt/default', {
+    await expect(getDefaultPromptFile('planner.txt')).resolves.toBe(content)
+    expect(getMock).toHaveBeenCalledWith('/api/webui/config/prompts/planner.txt/default', {
       errorMessage: '获取默认 Prompt 文件失败',
     })
   })
@@ -111,11 +109,11 @@ describe('updatePromptFile', () => {
   it('未传 options 时使用默认值：label 为空串、不创建版本', async () => {
     putMock.mockResolvedValue(makeFileContent())
 
-    await updatePromptFile('zh', 'planner.txt', '新内容')
+    await updatePromptFile('planner.txt', '新内容')
 
     expect(putMock).toHaveBeenCalledTimes(1)
     const [path, options] = putMock.mock.calls[0]
-    expect(path).toBe('/api/webui/config/prompts/zh/planner.txt')
+    expect(path).toBe('/api/webui/config/prompts/planner.txt')
     expect(options?.errorMessage).toBe('保存 Prompt 文件失败')
     const body = options?.body as Record<string, unknown>
     expect(body.content).toBe('新内容')
@@ -129,13 +127,13 @@ describe('updatePromptFile', () => {
     putMock.mockResolvedValue(content)
 
     await expect(
-      updatePromptFile('en', 'reply.txt', 'content', {
+      updatePromptFile('reply.txt', 'content', {
         versionId: 'v1',
         label: '备份',
         createVersion: true,
       })
     ).resolves.toBe(content)
-    expect(putMock).toHaveBeenCalledWith('/api/webui/config/prompts/en/reply.txt', {
+    expect(putMock).toHaveBeenCalledWith('/api/webui/config/prompts/reply.txt', {
       body: {
         content: 'content',
         version_id: 'v1',
@@ -149,7 +147,7 @@ describe('updatePromptFile', () => {
   it('保存失败时向上抛出 ApiError', async () => {
     putMock.mockRejectedValue(new ApiError('保存 Prompt 文件失败', { status: 422 }))
 
-    await expect(updatePromptFile('zh', 'planner.txt', 'x')).rejects.toBeInstanceOf(ApiError)
+    await expect(updatePromptFile('planner.txt', 'x')).rejects.toBeInstanceOf(ApiError)
   })
 })
 
@@ -158,8 +156,8 @@ describe('resetPromptFile', () => {
     const content = makeFileContent({ customized: false })
     deleteMock.mockResolvedValue(content)
 
-    await expect(resetPromptFile('zh', 'planner.txt')).resolves.toBe(content)
-    expect(deleteMock).toHaveBeenCalledWith('/api/webui/config/prompts/zh/planner.txt', {
+    await expect(resetPromptFile('planner.txt')).resolves.toBe(content)
+    expect(deleteMock).toHaveBeenCalledWith('/api/webui/config/prompts/planner.txt', {
       errorMessage: '重置 Prompt 文件失败',
     })
   })
@@ -170,9 +168,9 @@ describe('getPromptVersionFile', () => {
     const content = makeFileContent()
     getMock.mockResolvedValue(content)
 
-    await expect(getPromptVersionFile('zh', 'planner.txt', 'v/1')).resolves.toBe(content)
+    await expect(getPromptVersionFile('planner.txt', 'v/1')).resolves.toBe(content)
     expect(getMock).toHaveBeenCalledWith(
-      '/api/webui/config/prompts/zh/planner.txt/versions/v%2F1',
+      '/api/webui/config/prompts/planner.txt/versions/v%2F1',
       {
         errorMessage: '获取 Prompt 版本失败',
       }
@@ -185,9 +183,9 @@ describe('activatePromptVersion', () => {
     const content = makeFileContent({ active_version_id: 'v2' })
     postMock.mockResolvedValue(content)
 
-    await expect(activatePromptVersion('zh', 'planner.txt', 'v2')).resolves.toBe(content)
+    await expect(activatePromptVersion('planner.txt', 'v2')).resolves.toBe(content)
     expect(postMock).toHaveBeenCalledWith(
-      '/api/webui/config/prompts/zh/planner.txt/versions/v2/activate',
+      '/api/webui/config/prompts/planner.txt/versions/v2/activate',
       {
         errorMessage: '启用 Prompt 版本失败',
       }
@@ -197,7 +195,7 @@ describe('activatePromptVersion', () => {
   it('启用失败时向上抛出 ApiError', async () => {
     postMock.mockRejectedValue(new ApiError('启用 Prompt 版本失败', { status: 404 }))
 
-    await expect(activatePromptVersion('zh', 'planner.txt', 'missing')).rejects.toMatchObject({
+    await expect(activatePromptVersion('planner.txt', 'missing')).rejects.toMatchObject({
       status: 404,
     })
   })
@@ -208,9 +206,9 @@ describe('deletePromptVersion', () => {
     const content = makeFileContent({ customized: false })
     deleteMock.mockResolvedValue(content)
 
-    await expect(deletePromptVersion('zh', 'planner.txt', 'v2')).resolves.toBe(content)
+    await expect(deletePromptVersion('planner.txt', 'v2')).resolves.toBe(content)
     expect(deleteMock).toHaveBeenCalledWith(
-      '/api/webui/config/prompts/zh/planner.txt/versions/v2',
+      '/api/webui/config/prompts/planner.txt/versions/v2',
       {
         errorMessage: '删除 Prompt 版本失败',
       }

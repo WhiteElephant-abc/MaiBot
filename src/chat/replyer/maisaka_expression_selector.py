@@ -21,6 +21,7 @@ from src.learners.expression_style_utils import (
 )
 from src.learners.learner_utils_old import weighted_sample
 from src.maisaka.context.messages import LLMContextMessage
+from src.prompt.prompt_manager import prompt_manager
 
 logger = get_logger("maisaka_expression_selector")
 
@@ -260,7 +261,7 @@ class MaisakaExpressionSelector:
     def _has_embedding_model_configured() -> bool:
         return any(model_name.strip() for model_name in model_config.model_task_config.embedding.model_list)
 
-    def _build_selector_prompt(
+    async def _build_selector_prompt(
         self,
         *,
         candidates: List[dict[str, Any]],
@@ -270,15 +271,10 @@ class MaisakaExpressionSelector:
             for candidate in candidates
         ]
 
-        return (
-            "你是 Maisaka 的表达方式选择子代理。\n"
-            "你只负责根据下方真实聊天上下文，为这一次可见回复挑选最合适的表达方式。\n"
-            f"请只从下面候选中选择 0 到 {MAX_SELECTED_EXPRESSIONS} 条最适合当前语境的表达方式。\n"
-            "优先考虑自然、贴合上下文、不生硬、不模板化。\n"
-            "如果没有明显合适的，就返回空数组。\n"
-            '严格只输出 JSON，对象格式为 {"selected_ids":[123,456]}。\n\n'
-            f"候选表达方式：\n{chr(10).join(candidate_lines)}"
-        )
+        prompt_template = prompt_manager.get_prompt("expression_select")
+        prompt_template.add_context("max_selected", str(MAX_SELECTED_EXPRESSIONS))
+        prompt_template.add_context("candidate_lines", "\n".join(candidate_lines))
+        return await prompt_manager.render_prompt(prompt_template)
 
     def _parse_selected_ids(self, raw_response: str, candidates: List[dict[str, Any]]) -> List[int]:
         if not raw_response.strip():
@@ -528,7 +524,7 @@ class MaisakaExpressionSelector:
                 candidates=candidates,
             )
 
-        selector_prompt = self._build_selector_prompt(
+        selector_prompt = await self._build_selector_prompt(
             candidates=candidates,
         )
         try:

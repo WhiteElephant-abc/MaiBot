@@ -6,8 +6,6 @@ from typing import Any, Optional
 
 import inspect
 
-from src.common.i18n import get_locale
-from src.common.i18n.loaders import DEFAULT_LOCALE, normalize_locale
 from src.common.logger import get_logger
 from src.common.prompt_i18n import get_prompt_cache_revision, list_prompt_templates, load_prompt_template
 
@@ -26,42 +24,17 @@ CUSTOM_PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
 SUFFIX_PROMPT = ".prompt"
 
 
-def _normalize_prompt_locale(locale: str | None = None) -> str:
-    return normalize_locale(locale or get_locale())
-
-
-def _get_prompt_locale_from_path(prompt_path: Path) -> str | None:
-    try:
-        relative_path = prompt_path.resolve().relative_to(PROMPTS_DIR.resolve())
-    except ValueError:
-        return None
-
-    return relative_path.parts[0] if len(relative_path.parts) > 1 else None
-
-
-def _custom_prompt_path(prompt_name: str, locale: str | None = None) -> Path:
-    return CUSTOM_PROMPTS_DIR / _normalize_prompt_locale(locale) / f"{prompt_name}{SUFFIX_PROMPT}"
-
-
-def _legacy_custom_prompt_path(prompt_name: str) -> Path:
+def _custom_prompt_path(prompt_name: str) -> Path:
     return CUSTOM_PROMPTS_DIR / f"{prompt_name}{SUFFIX_PROMPT}"
 
 
-def _iter_custom_prompt_candidates(prompt_name: str, locale: str | None = None) -> list[Path]:
-    candidates: list[Path] = []
-    if locale:
-        candidates.append(_custom_prompt_path(prompt_name, locale))
-    candidates.append(_legacy_custom_prompt_path(prompt_name))
-    return candidates
-
-
 def _iter_active_custom_prompt_dirs() -> list[Path]:
-    prompt_dirs = [
-        CUSTOM_PROMPTS_DIR / DEFAULT_LOCALE,
-        CUSTOM_PROMPTS_DIR / _normalize_prompt_locale(),
-        CUSTOM_PROMPTS_DIR,
-    ]
-    return list(dict.fromkeys(prompt_dirs))
+    """返回用户自定义 Prompt 的目录。
+
+    模板不分语言，所以只有一个目录，保留函数是为了让调用方不必关心这一点。
+    """
+
+    return [CUSTOM_PROMPTS_DIR]
 
 
 class Prompt:
@@ -115,15 +88,13 @@ class PromptManager:
         """模板解析器"""
         self._prompt_to_save: set[str] = set()
         """需要保存的 Prompt 名称集合"""
-        self._prompt_save_locales: dict[str, str] = {}
-        """Prompt 保存时使用的语言目录"""
         self._loaded_from_files = False
         """是否已经从 prompt 文件加载过模板"""
         self._loaded_cache_revision = get_prompt_cache_revision()
         """上次加载时的 prompt 文件缓存版本"""
         self._reload_lock = RLock()
 
-    def add_prompt(self, prompt: Prompt, need_save: bool = False, prompt_locale: str | None = None) -> None:
+    def add_prompt(self, prompt: Prompt, need_save: bool = False) -> None:
         """
         添加一个新的 Prompt 实例
 
@@ -139,7 +110,6 @@ class PromptManager:
         self.prompts[prompt.prompt_name] = prompt
         if need_save:
             self._prompt_to_save.add(prompt.prompt_name)
-            self._prompt_save_locales[prompt.prompt_name] = _normalize_prompt_locale(prompt_locale)
 
     def remove_prompt(self, prompt_name: str) -> None:
         """
@@ -154,9 +124,8 @@ class PromptManager:
         del self.prompts[prompt_name]
         if prompt_name in self._prompt_to_save:
             self._prompt_to_save.remove(prompt_name)
-        self._prompt_save_locales.pop(prompt_name, None)
 
-    def replace_prompt(self, prompt: Prompt, need_save: bool = False, prompt_locale: str | None = None) -> None:
+    def replace_prompt(self, prompt: Prompt, need_save: bool = False) -> None:
         """
         替换一个已存在的 Prompt 实例
         Args:
@@ -170,10 +139,8 @@ class PromptManager:
         self.prompts[prompt.prompt_name] = prompt
         if need_save:
             self._prompt_to_save.add(prompt.prompt_name)
-            self._prompt_save_locales[prompt.prompt_name] = _normalize_prompt_locale(prompt_locale)
         elif prompt.prompt_name in self._prompt_to_save:
             self._prompt_to_save.remove(prompt.prompt_name)
-            self._prompt_save_locales.pop(prompt.prompt_name, None)
 
     def add_context_construct_function(self, name: str, func: Callable[[str], str | Coroutine[Any, Any, str]]) -> None:
         """
@@ -298,7 +265,7 @@ class PromptManager:
         Raises:
             Exception: 如果在保存过程中出现任何文件操作错误则引发该异常
         """
-        # 只清理当前加载语言层的 Prompt 文件，避免误删其它语言的用户自定义模板。
+        # 先清空自定义目录，再写入当前需要保存的模板
         for prompt_dir in _iter_active_custom_prompt_dirs():
             if not prompt_dir.exists():
                 continue
@@ -310,8 +277,7 @@ class PromptManager:
                     raise
         for prompt_name in self._prompt_to_save:
             prompt = self.prompts[prompt_name]
-            prompt_locale = self._prompt_save_locales.get(prompt_name, _normalize_prompt_locale())
-            file_path = _custom_prompt_path(prompt_name, prompt_locale)
+            file_path = _custom_prompt_path(prompt_name)
             try:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(prompt.template, encoding="utf-8")
@@ -319,16 +285,13 @@ class PromptManager:
                 logger.error(f"保存 Prompt '{prompt_name}' 时出错，文件路径: '{file_path}'，错误信息: {exc}")
                 raise
 
-    def _load_prompt_template(self, prompt_name: str, source_path: Path) -> tuple[str, bool, str | None]:
-        prompt_locale = _get_prompt_locale_from_path(source_path)
+    def _load_prompt_template(self, prompt_name: str) -> tuple[str, bool]:
         resolved_template = load_prompt_template(
             prompt_name,
-            locale=prompt_locale,
             prompts_root=PROMPTS_DIR,
             custom_prompts_root=CUSTOM_PROMPTS_DIR,
-            include_legacy_custom=True,
         )
-        return resolved_template.template, resolved_template.customized, resolved_template.locale or prompt_locale
+        return resolved_template.template, resolved_template.customized
 
     def load_prompts(self) -> None:
         """
@@ -339,24 +302,21 @@ class PromptManager:
         with self._reload_lock:
             loaded_prompts: dict[str, Prompt] = {}
             prompt_to_save: set[str] = set()
-            prompt_save_locales: dict[str, str] = {}
 
-            def add_loaded_prompt(prompt: Prompt, need_save: bool = False, prompt_locale: str | None = None) -> None:
+            def add_loaded_prompt(prompt: Prompt, need_save: bool = False) -> None:
                 if prompt.prompt_name in loaded_prompts or prompt.prompt_name in self._context_construct_functions:
                     raise KeyError(f"Prompt name '{prompt.prompt_name}' 已存在")
                 loaded_prompts[prompt.prompt_name] = prompt
                 if need_save:
                     prompt_to_save.add(prompt.prompt_name)
-                    prompt_save_locales[prompt.prompt_name] = _normalize_prompt_locale(prompt_locale)
 
             prompt_templates = list_prompt_templates(prompts_root=PROMPTS_DIR)
             for prompt_name, prompt_template in prompt_templates.items():
                 try:
-                    template, need_save, prompt_locale = self._load_prompt_template(prompt_name, prompt_template.path)
+                    template, need_save = self._load_prompt_template(prompt_name)
                     add_loaded_prompt(
                         Prompt(prompt_name=prompt_name, template=template),
                         need_save=need_save,
-                        prompt_locale=prompt_locale,
                     )
                 except Exception as exc:
                     logger.error(f"加载 Prompt 文件 '{prompt_template.path}' 时出错，错误信息: {exc}")
@@ -365,22 +325,18 @@ class PromptManager:
             for prompt_dir in _iter_active_custom_prompt_dirs():
                 if not prompt_dir.exists():
                     continue
-                prompt_locale = prompt_dir.name if prompt_dir.parent == CUSTOM_PROMPTS_DIR else None
                 for prompt_file in prompt_dir.glob(f"*{SUFFIX_PROMPT}"):
                     if prompt_file.stem in loaded_custom_prompts:
                         continue  # 已经加载过了，跳过
                     try:
                         resolved_template = load_prompt_template(
                             prompt_file.stem,
-                            locale=prompt_locale,
                             prompts_root=PROMPTS_DIR,
                             custom_prompts_root=CUSTOM_PROMPTS_DIR,
-                            include_legacy_custom=True,
                         )
                         add_loaded_prompt(
                             Prompt(prompt_name=prompt_file.stem, template=resolved_template.template),
                             need_save=True,
-                            prompt_locale=resolved_template.locale or prompt_locale,
                         )
                         loaded_custom_prompts.add(prompt_file.stem)
                     except Exception as exc:
@@ -388,7 +344,6 @@ class PromptManager:
                         raise
             self.prompts = loaded_prompts
             self._prompt_to_save = prompt_to_save
-            self._prompt_save_locales = prompt_save_locales
             self._loaded_from_files = True
             self._loaded_cache_revision = get_prompt_cache_revision()
 

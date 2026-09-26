@@ -1,18 +1,25 @@
+"""Prompt 模板的发现、解析与加载。
+
+模板只有一份，放在 `prompts/` 下，用户覆盖放在 `data/custom_prompts/` 下。
+这里刻意不引入语言维度：模板是给模型看的，模型不需要翻译，多语言只会带来
+「改了英文那份但中文那份还在生效」这类无从排查的问题。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
 from tomlkit import parse as parse_toml
+from typing import Any, Dict, Optional
 
 import json
 import logging
 import os
 import re
 
-from .i18n import get_locale, t
-from .i18n.loaders import DEFAULT_LOCALE, extract_placeholders, normalize_locale
+from .i18n import t
+from .i18n.loaders import extract_placeholders
 
 logger = logging.getLogger("maibot.prompt_i18n")
 
@@ -46,16 +53,15 @@ class ResolvedPromptTemplate:
     path: Path
     template: str
     customized: bool
-    locale: str | None
 
 
-def get_prompts_root(prompts_root: Path | None = None) -> Path:
+def get_prompts_root(prompts_root: Optional[Path] = None) -> Path:
     return (prompts_root or PROMPTS_ROOT).resolve()
 
 
 def get_custom_prompts_root(
-    custom_prompts_root: Path | None = None,
-    prompts_root: Path | None = None,
+    custom_prompts_root: Optional[Path] = None,
+    prompts_root: Optional[Path] = None,
 ) -> Path:
     if custom_prompts_root is not None:
         return custom_prompts_root.resolve()
@@ -76,7 +82,7 @@ def normalize_prompt_name(name: str) -> str:
     return candidate_name
 
 
-def normalize_prompt_category(category: str | None) -> str | None:
+def normalize_prompt_category(category: Optional[str]) -> Optional[str]:
     if category is None:
         return None
 
@@ -95,15 +101,6 @@ def is_strict_prompt_i18n_mode() -> bool:
         return True
 
     return any(os.getenv(env_key, "").strip().lower() in STRICT_ENV_VALUES for env_key in STRICT_ENV_KEYS)
-
-
-def discover_prompt_locales(prompts_root: Path | None = None) -> list[str]:
-    resolved_prompts_root = get_prompts_root(prompts_root)
-    if not resolved_prompts_root.exists():
-        return []
-
-    locale_names = [path.name for path in resolved_prompts_root.iterdir() if path.is_dir()]
-    return sorted(locale_names)
 
 
 def iter_prompt_files(directory: Path, recursive: bool = True) -> list[Path]:
@@ -145,7 +142,7 @@ def _coerce_metadata(raw_metadata: Any) -> PromptMetadata:
     )
 
 
-def _read_metadata_file(metadata_path: Path) -> dict[str, Any]:
+def _read_metadata_file(metadata_path: Path) -> Dict[str, Any]:
     if not metadata_path.is_file():
         return {}
 
@@ -161,7 +158,7 @@ def _read_metadata_file(metadata_path: Path) -> dict[str, Any]:
     return dict(metadata) if isinstance(metadata, dict) else {}
 
 
-def _extract_template_metadata(metadata: dict[str, Any], prompt_name: str) -> dict[str, Any]:
+def _extract_template_metadata(metadata: Dict[str, Any], prompt_name: str) -> Dict[str, Any]:
     templates = metadata.get("templates")
     if isinstance(templates, dict) and isinstance(templates.get(prompt_name), dict):
         return dict(templates[prompt_name])
@@ -182,7 +179,7 @@ def _load_prompt_metadata(prompt_path: Path) -> PromptMetadata:
         prompt_path.parent / ".meta.json",
     )
 
-    merged_metadata: dict[str, Any] = {}
+    merged_metadata: Dict[str, Any] = {}
     for metadata_path in reversed(metadata_sources):
         raw_metadata = _read_metadata_file(metadata_path)
         merged_metadata.update(_extract_template_metadata(raw_metadata, prompt_name))
@@ -190,8 +187,8 @@ def _load_prompt_metadata(prompt_path: Path) -> PromptMetadata:
     return _coerce_metadata(merged_metadata)
 
 
-def _scan_prompt_directory(directory: Path, prompts_root: Path) -> dict[str, PromptTemplateInfo]:
-    prompt_paths: dict[str, PromptTemplateInfo] = {}
+def _scan_prompt_directory(directory: Path, prompts_root: Path) -> Dict[str, PromptTemplateInfo]:
+    prompt_paths: Dict[str, PromptTemplateInfo] = {}
     for prompt_path in iter_prompt_files(directory):
         prompt_name = prompt_path.stem
         existing_info = prompt_paths.get(prompt_name)
@@ -201,21 +198,7 @@ def _scan_prompt_directory(directory: Path, prompts_root: Path) -> dict[str, Pro
     return prompt_paths
 
 
-def _iter_prompt_template_layers(prompts_root: Path, requested_locale: str) -> list[Path]:
-    prompt_layers: list[Path] = [prompts_root / DEFAULT_LOCALE]
-    if requested_locale != DEFAULT_LOCALE:
-        prompt_layers.append(prompts_root / requested_locale)
-    return prompt_layers
-
-
-def _iter_locale_candidates(requested_locale: str) -> list[str]:
-    locale_candidates: list[str] = [requested_locale]
-    if requested_locale != DEFAULT_LOCALE:
-        locale_candidates.append(DEFAULT_LOCALE)
-    return locale_candidates
-
-
-def _iter_prompt_path_candidates(base_dir: Path, name: str, category: str | None = None) -> list[Path]:
+def _iter_prompt_path_candidates(base_dir: Path, name: str, category: Optional[str] = None) -> list[Path]:
     candidates: list[Path] = []
     for suffix in PROMPT_EXTENSIONS:
         if category is not None:
@@ -226,98 +209,46 @@ def _iter_prompt_path_candidates(base_dir: Path, name: str, category: str | None
 
 def _resolve_custom_prompt_path(
     name: str,
-    locale: str,
-    category: str | None,
+    category: Optional[str],
     custom_prompts_root: Path,
-) -> Path | None:
-    custom_locale_dir = custom_prompts_root / locale
-    for candidate_path in _iter_prompt_path_candidates(custom_locale_dir, name, category):
+) -> Optional[Path]:
+    for candidate_path in _iter_prompt_path_candidates(custom_prompts_root, name, category):
         if candidate_path.is_file():
             return candidate_path
     return None
 
 
-def _resolve_legacy_custom_prompt_path(name: str, custom_prompts_root: Path) -> Path | None:
-    for suffix in PROMPT_EXTENSIONS:
-        candidate_path = (custom_prompts_root / f"{name}{suffix}").resolve()
-        if candidate_path.is_file():
-            return candidate_path
-    return None
-
-
-def list_prompt_templates(locale: str | None = None, prompts_root: Path | None = None) -> dict[str, PromptTemplateInfo]:
+def list_prompt_templates(prompts_root: Optional[Path] = None) -> Dict[str, PromptTemplateInfo]:
     resolved_prompts_root = get_prompts_root(prompts_root)
-    requested_locale = normalize_locale(locale or get_locale())
-
-    prompt_paths: dict[str, PromptTemplateInfo] = {}
-    for directory in _iter_prompt_template_layers(resolved_prompts_root, requested_locale):
-        prompt_paths.update(_scan_prompt_directory(directory, resolved_prompts_root))
-
-    return prompt_paths
+    return _scan_prompt_directory(resolved_prompts_root, resolved_prompts_root)
 
 
 def resolve_prompt_path(
     name: str,
-    locale: str | None = None,
-    category: str | None = None,
-    prompts_root: Path | None = None,
-    custom_prompts_root: Path | None = None,
-    include_legacy_custom: bool = False,
+    category: Optional[str] = None,
+    prompts_root: Optional[Path] = None,
+    custom_prompts_root: Optional[Path] = None,
 ) -> Path:
     resolved_prompts_root = get_prompts_root(prompts_root)
     resolved_custom_prompts_root = get_custom_prompts_root(custom_prompts_root, prompts_root)
     normalized_name = normalize_prompt_name(name)
     normalized_category = normalize_prompt_category(category)
-    requested_locale = normalize_locale(locale or get_locale())
 
-    if normalized_category is not None:
-        for locale_candidate in _iter_locale_candidates(requested_locale):
-            custom_path = _resolve_custom_prompt_path(
-                normalized_name,
-                locale_candidate,
-                normalized_category,
-                resolved_custom_prompts_root,
-            )
-            if custom_path is not None:
-                return custom_path
+    # 用户覆盖优先：data/custom_prompts 下的同名模板直接生效
+    custom_path = _resolve_custom_prompt_path(
+        normalized_name,
+        normalized_category,
+        resolved_custom_prompts_root,
+    )
+    if custom_path is not None:
+        return custom_path
 
-            if include_legacy_custom:
-                legacy_custom_path = _resolve_legacy_custom_prompt_path(normalized_name, resolved_custom_prompts_root)
-                if legacy_custom_path is not None:
-                    return legacy_custom_path
+    base_dir = resolved_prompts_root
+    for candidate_path in _iter_prompt_path_candidates(base_dir, normalized_name, normalized_category):
+        if candidate_path.is_file():
+            return candidate_path
 
-            base_dir = resolved_prompts_root / locale_candidate
-            for suffix in PROMPT_EXTENSIONS:
-                candidate_path = (base_dir / normalized_category / f"{normalized_name}{suffix}").resolve()
-                if candidate_path.is_file():
-                    return candidate_path
-
-                # 允许带 category 的调用继续复用 locale 根目录下的平铺模板。
-                fallback_path = (base_dir / f"{normalized_name}{suffix}").resolve()
-                if fallback_path.is_file():
-                    return fallback_path
-    else:
-        for locale_candidate in _iter_locale_candidates(requested_locale):
-            custom_path = _resolve_custom_prompt_path(
-                normalized_name,
-                locale_candidate,
-                None,
-                resolved_custom_prompts_root,
-            )
-            if custom_path is not None:
-                return custom_path
-
-            if include_legacy_custom:
-                legacy_custom_path = _resolve_legacy_custom_prompt_path(normalized_name, resolved_custom_prompts_root)
-                if legacy_custom_path is not None:
-                    return legacy_custom_path
-
-            base_dir = resolved_prompts_root / locale_candidate
-            for candidate_path in _iter_prompt_path_candidates(base_dir, normalized_name):
-                if candidate_path.is_file():
-                    return candidate_path
-
-    raise FileNotFoundError(t("prompt.template_not_found", locale=requested_locale, name=normalized_name))
+    raise FileNotFoundError(t("prompt.template_not_found", name=normalized_name))
 
 
 @lru_cache(maxsize=None)
@@ -325,44 +256,25 @@ def _read_prompt_template(prompt_path: Path) -> str:
     return prompt_path.read_text(encoding="utf-8")
 
 
-def _get_locale_from_prompt_path(prompt_path: Path, root: Path) -> str | None:
-    try:
-        relative_path = prompt_path.resolve().relative_to(root.resolve())
-    except ValueError:
-        return None
-
-    return relative_path.parts[0] if len(relative_path.parts) > 1 else None
-
-
 def load_prompt_template(
     name: str,
-    locale: str | None = None,
-    category: str | None = None,
-    prompts_root: Path | None = None,
-    custom_prompts_root: Path | None = None,
-    include_legacy_custom: bool = False,
+    category: Optional[str] = None,
+    prompts_root: Optional[Path] = None,
+    custom_prompts_root: Optional[Path] = None,
 ) -> ResolvedPromptTemplate:
     resolved_prompts_root = get_prompts_root(prompts_root)
     resolved_custom_prompts_root = get_custom_prompts_root(custom_prompts_root, prompts_root)
     normalized_name = normalize_prompt_name(name)
     prompt_path = resolve_prompt_path(
         name=normalized_name,
-        locale=locale,
         category=category,
         prompts_root=resolved_prompts_root,
         custom_prompts_root=resolved_custom_prompts_root,
-        include_legacy_custom=include_legacy_custom,
     )
-    prompt_locale = _get_locale_from_prompt_path(prompt_path, resolved_prompts_root)
-    customized = False
-    if prompt_locale is None:
-        prompt_locale = _get_locale_from_prompt_path(prompt_path, resolved_custom_prompts_root)
-        customized = prompt_path.is_relative_to(resolved_custom_prompts_root)
     return ResolvedPromptTemplate(
         path=prompt_path,
         template=_read_prompt_template(prompt_path),
-        customized=customized,
-        locale=prompt_locale,
+        customized=prompt_path.is_relative_to(resolved_custom_prompts_root),
     )
 
 
@@ -388,16 +300,14 @@ def _format_prompt_template(name: str, template: str, **kwargs: object) -> str:
 
 def load_prompt(
     name: str,
-    locale: str | None = None,
-    category: str | None = None,
-    prompts_root: Path | None = None,
-    custom_prompts_root: Path | None = None,
+    category: Optional[str] = None,
+    prompts_root: Optional[Path] = None,
+    custom_prompts_root: Optional[Path] = None,
     **kwargs: object,
 ) -> str:
     normalized_name = normalize_prompt_name(name)
     resolved_template = load_prompt_template(
         name=normalized_name,
-        locale=locale,
         category=category,
         prompts_root=prompts_root,
         custom_prompts_root=custom_prompts_root,

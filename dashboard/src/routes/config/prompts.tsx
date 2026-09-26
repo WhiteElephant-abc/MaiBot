@@ -251,7 +251,6 @@ function buildPromptDiff(defaultContent: string, currentContent: string): Prompt
 export function PromptManagementPage() {
   const { toast } = useToast()
   const [catalog, setCatalog] = useState<PromptCatalog | null>(null)
-  const [language, setLanguage] = useState('zh-CN')
   const [filename, setFilename] = useState('')
   const [content, setContent] = useState('')
   const [savedContent, setSavedContent] = useState('')
@@ -278,9 +277,8 @@ export function PromptManagementPage() {
   const hasUnsavedChanges = content !== savedContent
 
   const promptFiles = useMemo<PromptFileInfo[]>(() => {
-    if (!catalog || !language) return []
-    return catalog.files[language] ?? []
-  }, [catalog, language])
+    return catalog?.files ?? []
+  }, [catalog])
 
   const visiblePromptFiles = useMemo<PromptFileInfo[]>(() => {
     return showAdvancedPrompts ? promptFiles : promptFiles.filter((file) => !file.advanced)
@@ -306,8 +304,9 @@ export function PromptManagementPage() {
   const canApplySelectedVersion = !selectedVersionIsApplied && !hasUnsavedChanges
   const canDeleteSelectedVersion =
     selectedCustomVersion && !hasUnsavedChanges && !loadingFile && !saving && !applyingVersion
-  const selectedVersionStorageKey =
-    language && filename ? `maibot.promptManagement.selectedVersion.${language}/${filename}` : ''
+  const selectedVersionStorageKey = filename
+    ? `maibot.promptManagement.selectedVersion.${filename}`
+    : ''
   const diffState = useMemo(
     () => buildPromptDiff(diffDefaultContent, content),
     [content, diffDefaultContent]
@@ -351,15 +350,7 @@ export function PromptManagementPage() {
       setLoadingCatalog(true)
       const result = await getPromptCatalog()
       setCatalog(result)
-      const nextLanguage =
-        language && result.languages.includes(language)
-          ? language
-          : result.languages.includes('zh-CN')
-            ? 'zh-CN'
-            : (result.languages[0] ?? '')
-      setLanguage(nextLanguage)
-
-      const nextFiles = nextLanguage ? (result.files[nextLanguage] ?? []) : []
+      const nextFiles = result.files
       const nextBasicFiles = nextFiles.filter((file) => !file.advanced)
       setFilename((current) =>
         nextFiles.some((file) => file.name === current)
@@ -375,14 +366,14 @@ export function PromptManagementPage() {
     } finally {
       setLoadingCatalog(false)
     }
-  }, [language, toast])
+  }, [toast])
 
   useEffect(() => {
     void loadCatalog()
   }, [loadCatalog])
 
   useEffect(() => {
-    if (!language || !filename) {
+    if (!filename) {
       setContent('')
       setSavedContent('')
       setVersions([])
@@ -397,7 +388,7 @@ export function PromptManagementPage() {
     const loadFile = async () => {
       try {
         setLoadingFile(true)
-        const result = await getPromptFile(language, filename)
+        const result = await getPromptFile(filename)
         if (cancelled) return
         const persistedVersionId = selectedVersionStorageKey
           ? localStorage.getItem(selectedVersionStorageKey)
@@ -412,8 +403,8 @@ export function PromptManagementPage() {
         if (nextVersionId && nextVersionId !== result.active_version_id) {
           promptContentResult =
             nextVersionId === DEFAULT_VERSION_ID
-              ? await getDefaultPromptFile(language, filename)
-              : await getPromptVersionFile(language, filename, nextVersionId)
+              ? await getDefaultPromptFile(filename)
+              : await getPromptVersionFile(filename, nextVersionId)
           if (cancelled) return
         }
 
@@ -421,7 +412,7 @@ export function PromptManagementPage() {
           const defaultResult =
             nextVersionId === DEFAULT_VERSION_ID
               ? promptContentResult
-              : await getDefaultPromptFile(language, filename)
+              : await getDefaultPromptFile(filename)
           if (cancelled) return
           setDiffDefaultContent(defaultResult.content)
         } else {
@@ -448,24 +439,14 @@ export function PromptManagementPage() {
     return () => {
       cancelled = true
     }
-  }, [applyPromptContent, filename, language, selectedVersionStorageKey, toast])
-
-  const handleLanguageChange = (nextLanguage: string) => {
-    setLanguage(nextLanguage)
-    setQuery('')
-    const nextFiles = catalog?.files[nextLanguage] ?? []
-    const nextVisibleFiles = showAdvancedPrompts
-      ? nextFiles
-      : nextFiles.filter((file) => !file.advanced)
-    setFilename(nextVisibleFiles[0]?.name ?? '')
-  }
+  }, [applyPromptContent, filename, selectedVersionStorageKey, toast])
 
   const handleSave = async () => {
-    if (!language || !filename) return
+    if (!filename) return
 
     try {
       setSaving(true)
-      const result = await updatePromptFile(language, filename, content, {
+      const result = await updatePromptFile(filename, content, {
         versionId: selectedCustomVersion ? selectedVersionId : null,
         createVersion: !selectedCustomVersion,
       })
@@ -473,7 +454,7 @@ export function PromptManagementPage() {
       if (selectedVersionStorageKey) {
         localStorage.setItem(selectedVersionStorageKey, result.active_version_id ?? DEFAULT_VERSION_ID)
       }
-      toast({ title: 'Prompt 已保存', description: `${language}/${filename}` })
+      toast({ title: 'Prompt 已保存', description: `${filename}` })
       void loadCatalog()
     } catch (error) {
       toast({
@@ -487,7 +468,7 @@ export function PromptManagementPage() {
   }
 
   const handleVersionChange = async (nextVersionId: string) => {
-    if (!language || !filename) return
+    if (!filename) return
     if (hasUnsavedChanges) {
       toast({
         title: '当前 Prompt 有未保存修改',
@@ -501,8 +482,8 @@ export function PromptManagementPage() {
       setLoadingFile(true)
       const result =
         nextVersionId === DEFAULT_VERSION_ID
-          ? await getDefaultPromptFile(language, filename)
-          : await getPromptVersionFile(language, filename, nextVersionId)
+          ? await getDefaultPromptFile(filename)
+          : await getPromptVersionFile(filename, nextVersionId)
       applyPromptContent(result, nextVersionId)
       if (selectedVersionStorageKey) {
         localStorage.setItem(selectedVersionStorageKey, nextVersionId)
@@ -519,19 +500,19 @@ export function PromptManagementPage() {
   }
 
   const handleApplySelectedVersion = async () => {
-    if (!language || !filename) return
+    if (!filename) return
 
     try {
       setApplyingVersion(true)
       const result =
         selectedVersionId === DEFAULT_VERSION_ID
-          ? await resetPromptFile(language, filename)
-          : await activatePromptVersion(language, filename, selectedVersionId)
+          ? await resetPromptFile(filename)
+          : await activatePromptVersion(filename, selectedVersionId)
       applyPromptContent(result, result.active_version_id ?? selectedVersionId)
       if (selectedVersionStorageKey) {
         localStorage.setItem(selectedVersionStorageKey, result.active_version_id ?? selectedVersionId)
       }
-      toast({ title: '已应用 Prompt 版本', description: `${language}/${filename}` })
+      toast({ title: '已应用 Prompt 版本', description: `${filename}` })
       void loadCatalog()
     } catch (error) {
       toast({
@@ -545,12 +526,12 @@ export function PromptManagementPage() {
   }
 
   const handleDeleteSelectedVersion = async () => {
-    if (!language || !filename || !selectedCustomVersion) return
+    if (!filename || !selectedCustomVersion) return
 
     try {
       setDeletingVersion(true)
       const deletedVersion = versions.find((version) => version.id === selectedVersionId)
-      const result = await deletePromptVersion(language, filename, selectedVersionId)
+      const result = await deletePromptVersion(filename, selectedVersionId)
       const nextSelectedVersionId = result.active_version_id ?? DEFAULT_VERSION_ID
       applyPromptContent(result, nextSelectedVersionId)
       if (selectedVersionStorageKey) {
@@ -559,7 +540,7 @@ export function PromptManagementPage() {
       setDeleteVersionDialogOpen(false)
       toast({
         title: 'Prompt 版本已删除',
-        description: `${deletedVersion?.label ?? selectedVersionId} · ${language}/${filename}`,
+        description: `${deletedVersion?.label ?? selectedVersionId} · ${filename}`,
       })
       void loadCatalog()
     } catch (error) {
@@ -574,12 +555,12 @@ export function PromptManagementPage() {
   }
 
   const handleShowDefault = async () => {
-    if (!language || !filename) return
+    if (!filename) return
 
     try {
       setLoadingDefaultPrompt(true)
       setDefaultPromptOpen(true)
-      const result = await getDefaultPromptFile(language, filename)
+      const result = await getDefaultPromptFile(filename)
       setDefaultPromptContent(result.content)
     } catch (error) {
       toast({
@@ -598,11 +579,11 @@ export function PromptManagementPage() {
       setDiffMode(false)
       return
     }
-    if (!language || !filename) return
+    if (!filename) return
 
     try {
       setLoadingDiffDefault(true)
-      const result = await getDefaultPromptFile(language, filename)
+      const result = await getDefaultPromptFile(filename)
       setDiffDefaultContent(result.content)
       setDiffMode(true)
     } catch (error) {
@@ -623,18 +604,6 @@ export function PromptManagementPage() {
           <h1 className="text-xl font-bold sm:text-2xl md:text-3xl">Prompt管理</h1>
         </div>
         <div className="flex min-w-0 items-center gap-1.5 sm:flex-wrap sm:gap-2">
-          <Select value={language} onValueChange={handleLanguageChange} disabled={loadingCatalog}>
-            <SelectTrigger className="h-8 w-[6.25rem] text-xs sm:h-9 sm:w-[160px] sm:text-sm">
-              <SelectValue placeholder="选择语言" />
-            </SelectTrigger>
-            <SelectContent>
-              {(catalog?.languages ?? []).map((item) => (
-                <SelectItem key={item} value={item}>
-                  {item}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Button
             variant="outline"
             size="icon"
@@ -773,8 +742,7 @@ export function PromptManagementPage() {
                   )}
                 </CardTitle>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {language}
-                  {selectedFile ? ` · ${formatFileSize(selectedFile.size)}` : ''}
+                  {selectedFile ? formatFileSize(selectedFile.size) : ''}
                   {versions.length > 0 ? ` · ${versions.length} 个自定义版本` : ''}
                   {hasUnsavedChanges ? ' · 有未保存修改' : ''}
                 </p>
@@ -962,7 +930,7 @@ export function PromptManagementPage() {
           <DialogHeader>
             <DialogTitle>默认 Prompt</DialogTitle>
             <DialogDescription>
-              {language}/{filename} 的内置模板，只读显示，不会修改或删除自定义内容。
+              {filename} 的内置模板，只读显示，不会修改或删除自定义内容。
             </DialogDescription>
           </DialogHeader>
           {loadingDefaultPrompt ? (
