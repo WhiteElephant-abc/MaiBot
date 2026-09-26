@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlmodel import col, func, select
 
-from src.common.data_models.llm_service_data_models import LLMGenerationOptions
 from src.common.database.database import get_db_session
 from src.common.database.database_model import (
     BehaviorAction,
@@ -233,7 +232,6 @@ async def _analyze_debug_scene_text(scene_text: str) -> BehaviorScenarioProfile:
         scene_messages = _build_debug_scene_messages(normalized_scene_text, system_prompt)
         generation_result = await behavior_scene_debug_model.generate_response_with_context(
             lambda _client: scene_messages,
-            options=LLMGenerationOptions(temperature=0.2),
         )
         return generation_result.response or ""
 
@@ -566,7 +564,7 @@ def _session_scope(session_id: Optional[str]) -> set[str]:
 
 
 @router.get("/chats")
-async def list_behavior_chats() -> dict[str, Any]:
+def list_behavior_chats() -> dict[str, Any]:
     """列出存在行为经验路径的聊天流。"""
 
     with get_db_session(auto_commit=False) as session:
@@ -611,7 +609,7 @@ async def list_behavior_chats() -> dict[str, Any]:
 
 
 @router.get("/paths", response_model=BehaviorPathListResponse)
-async def list_behavior_paths(
+def list_behavior_paths(
     session_id: Annotated[Optional[str], Query()] = None,
     search: Annotated[str, Query()] = "",
     enabled: Annotated[str, Query()] = "all",
@@ -662,7 +660,7 @@ async def list_behavior_paths(
 
 
 @router.get("/clusters", response_model=BehaviorClusterListResponse)
-async def list_behavior_clusters(
+def list_behavior_clusters(
     session_id: Annotated[Optional[str], Query()] = None,
     search: Annotated[str, Query()] = "",
     sort_by: Annotated[str, Query()] = "update_time",
@@ -700,7 +698,7 @@ async def list_behavior_clusters(
 
 
 @router.get("/graph-data", response_model=BehaviorGraphDataResponse)
-async def get_behavior_graph_data(
+def get_behavior_graph_data(
     session_id: Annotated[Optional[str], Query()] = None,
 ) -> BehaviorGraphDataResponse:
     """返回 WebUI 行为学习图谱所需的场景簇网络和 tag 簇分布网络。"""
@@ -710,7 +708,7 @@ async def get_behavior_graph_data(
 
 
 @router.get("/paths/{path_id}", response_model=BehaviorPathDetailResponse)
-async def get_behavior_path_detail(path_id: int) -> BehaviorPathDetailResponse:
+def get_behavior_path_detail(path_id: int) -> BehaviorPathDetailResponse:
     """读取一条行为经验路径及其局部图谱。"""
 
     with get_db_session(auto_commit=False) as session:

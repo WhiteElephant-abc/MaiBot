@@ -1861,7 +1861,7 @@ def _should_replace_duplicate_replyer_record(existing_item: ReasoningPromptFile,
 
 
 @router.get("/stages", response_model=ReasoningPromptStagesResponse)
-async def list_reasoning_prompt_stages():
+def list_reasoning_prompt_stages():
     """只列出 logs/maisaka_prompt 下的推理过程类型概览。"""
 
     stage_infos = _list_stage_infos()
@@ -1872,7 +1872,7 @@ async def list_reasoning_prompt_stages():
 
 
 @router.delete("/stages/{stage}", response_model=ReasoningPromptClearStageResponse)
-async def clear_reasoning_prompt_stage(stage: str):
+def clear_reasoning_prompt_stage(stage: str):
     """清空指定类型的推理过程日志。"""
 
     stage_name = _resolve_stage_name(stage)
@@ -1890,7 +1890,7 @@ async def clear_reasoning_prompt_stage(stage: str):
 
 
 @router.get("/files", response_model=ReasoningPromptListResponse)
-async def list_reasoning_prompt_files(
+def list_reasoning_prompt_files(
     stage: str = Query("planner"),
     session: str = Query("auto"),
     action: str = Query(""),
@@ -1981,7 +1981,7 @@ async def list_reasoning_prompt_files(
 
 
 @router.get("/file", response_model=ReasoningPromptContentResponse)
-async def get_reasoning_prompt_file(path: str = Query(...)):
+def get_reasoning_prompt_file(path: str = Query(...)):
     """读取推理过程 txt/json 日志内容。"""
 
     file_path = _resolve_prompt_log_path(path, {".txt", ".json"})
@@ -2018,7 +2018,7 @@ async def get_reasoning_prompt_file(path: str = Query(...)):
 
 
 @router.get("/image")
-async def get_reasoning_prompt_image(path: str = Query(...)):
+def get_reasoning_prompt_image(path: str = Query(...)):
     """读取推理记录引用的本地图片，只允许访问既有图片缓存目录。"""
 
     try:
@@ -2094,7 +2094,7 @@ async def replay_reasoning_prompt(request: ReasoningReplayRequest):
 
 
 @router.get("/html")
-async def get_reasoning_prompt_html(path: str = Query(...)):
+def get_reasoning_prompt_html(path: str = Query(...)):
     """预览推理过程 html 日志内容。"""
 
     file_path = _resolve_prompt_log_path(path, {".html"})
